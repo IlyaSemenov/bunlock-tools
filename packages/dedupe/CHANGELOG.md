@@ -1,5 +1,11 @@
 # bunlock-dedupe
 
+## 1.9.1
+
+### Patch Changes
+
+- 374b6a3: Analyze large lockfiles faster.
+
 ## 1.9.0
 
 ### Minor Changes
