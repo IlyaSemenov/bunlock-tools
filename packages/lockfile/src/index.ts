@@ -8,6 +8,7 @@ export type {
   DependencyMap,
 } from "./parse"
 export {
+  BunLockFormatError,
   isGitPackageEntry,
   isOptionalPeerDependency,
   isPackageEntry,

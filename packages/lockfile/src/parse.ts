@@ -145,20 +145,33 @@ export function parseResolvedSpec(spec: string): { name: string; version: string
   return { name, version }
 }
 
+/** Error thrown when `bun.lock` has a structure that the tools do not support. */
+export class BunLockFormatError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "BunLockFormatError"
+  }
+}
+
+/** Parses `bun.lock` text and throws `BunLockFormatError` on unsupported structure. */
 export function parseBunLock(lockText: string): BunLockFile {
   const parsed = JSON5.parse(lockText)
   if (!isObject(parsed)) {
-    throw new Error("bun.lock must parse to an object")
+    throw new BunLockFormatError("bun.lock must parse to an object")
   }
 
   const overrides = parsed.overrides
   if (overrides !== undefined) {
     if (!isObject(overrides) || Array.isArray(overrides)) {
-      throw new Error("bun.lock overrides must be an object")
+      throw new BunLockFormatError("bun.lock overrides must be an object")
     }
+    // Bun writes overrides scoped to a parent package or to a version selector as objects.
+    // Their effective range depends on the requester, while dependency lookup matches overrides by name only.
     for (const [name, value] of Object.entries(overrides)) {
       if (typeof value !== "string") {
-        throw new Error(`bun.lock override for ${JSON.stringify(name)} must be a string`)
+        throw new BunLockFormatError(
+          `bun.lock override ${JSON.stringify(name)} is scoped to a parent package or a version selector; only overrides by package name are supported`,
+        )
       }
     }
   }

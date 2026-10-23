@@ -3,7 +3,8 @@ import type { BunLockFile } from "./parse"
 /**
  * Read the exact bare-name override Bun stores for a dependency.
  *
- * Bun 1.3.14 ignores selector keys and omits unsupported nested/path forms,
+ * `parseBunLock` rejects overrides scoped to a parent package or a version selector.
+ * Bun versions before 1.4 keep selector keys as strings without applying them,
  * so matching those here would diverge from the package manager.
  */
 export function dependencyOverrideRange(

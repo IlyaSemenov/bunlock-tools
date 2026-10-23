@@ -3,7 +3,7 @@
 import { writeFileSync } from "node:fs"
 import { parseArgs } from "node:util"
 
-import { parseBunLock } from "bunlock-lockfile"
+import { BunLockFormatError, parseBunLock } from "bunlock-lockfile"
 
 import {
   buildFixSummary,
@@ -262,9 +262,10 @@ async function run(): Promise<void> {
 }
 
 run().catch((error: unknown) => {
-  if (error instanceof RegistryError) {
-    // A transient registry failure would otherwise produce a report skewed by
-    // missing data, so abort instead of reporting partial results.
+  // A transient registry failure would otherwise produce a report skewed by
+  // missing data, so abort instead of reporting partial results.
+  // An unsupported lockfile structure is a user-facing condition, not a crash.
+  if (error instanceof RegistryError || error instanceof BunLockFormatError) {
     console.error(`Error: ${error.message}`)
     process.exit(1)
   }

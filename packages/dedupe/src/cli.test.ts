@@ -122,3 +122,27 @@ test.each([
     }
   },
 )
+
+test("reports an unsupported scoped override without a stack trace", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "bunlock-dedupe-"))
+  try {
+    writeFileSync(
+      path.join(dir, "bun.lock"),
+      JSON.stringify({
+        lockfileVersion: 3,
+        workspaces: { "": { name: "app", dependencies: { "is-odd": "0.1.2" } } },
+        overrides: { "is-odd": { "is-number": "7.0.0" } },
+        packages: {},
+      }),
+    )
+    const proc = Bun.spawn(["bun", "src/cli.ts", dir], { stdout: "pipe", stderr: "pipe" })
+    const stderr = await new Response(proc.stderr).text()
+
+    expect(await proc.exited).toBe(1)
+    expect(stderr).toBe(
+      'Error: bun.lock override "is-odd" is scoped to a parent package or a version selector; only overrides by package name are supported\n',
+    )
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
