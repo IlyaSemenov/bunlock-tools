@@ -1,10 +1,6 @@
 import type { DuplicatePackageInfo, DuplicateVersionInfo } from "./analyze"
 import { evaluateRequestCompatibility } from "./analyze"
-import {
-  isSuggestedTarget,
-  resolveSuggestedUnlock,
-  type SuggestedUpdate,
-} from "./update-analyze"
+import { isSuggestedTarget, resolveSuggestedUnlock, type SuggestedUpdate } from "./update-analyze"
 import type { SkippedUpdate, UpdateSkipReason } from "./update-fix"
 
 const DEDUPE_ICON = "⬆️"
@@ -79,21 +75,17 @@ function rewriteCannotDedupeAsOrphan(
   duplicates: DuplicatePackageInfo[],
   suggestedUpdates: SuggestedUpdate[],
 ): DuplicatePackageInfo[] {
-  return duplicates.map((dup) => ({
+  return duplicates.map(dup => ({
     ...dup,
     versions: dup.versions.map((v): DuplicateVersionInfo => {
       if (v.status !== "cannot-dedupe") return v
 
       // Update analysis assigns one shared target to every update that removes
       // this package version; reporting must evaluate untouched requests there.
-      const unlock = resolveSuggestedUnlock(
-        dup.name,
-        v.version,
-        suggestedUpdates,
-      )
+      const unlock = resolveSuggestedUnlock(dup.name, v.version, suggestedUpdates)
       if (!unlock) return v
 
-      const updatedRequests = v.requests.filter((r) =>
+      const updatedRequests = v.requests.filter(r =>
         unlock.requesterLockKeys.has(r.requesterNodeId),
       )
       if (updatedRequests.length === 0) return v
@@ -102,7 +94,7 @@ function rewriteCannotDedupeAsOrphan(
       // accepts the target; a single incompatible co-blocker keeps it pinned,
       // so claiming removal would misreport the outcome.
       const removable = v.requests.every(
-        (r) =>
+        r =>
           unlock.requesterLockKeys.has(r.requesterNodeId) ||
           evaluateRequestCompatibility(r, unlock.targetVersion) === true,
       )
@@ -192,9 +184,7 @@ function buildDedupeReasonsByRequester(
   )
 }
 
-function buildUpdateReasonsByRequester(
-  updates: SuggestedUpdate[],
-): Map<string, RemovalReason[]> {
+function buildUpdateReasonsByRequester(updates: SuggestedUpdate[]): Map<string, RemovalReason[]> {
   const reasonsByRequester = new Map<string, RemovalReason[]>()
 
   for (const update of updates) {
@@ -208,9 +198,7 @@ function buildUpdateReasonsByRequester(
   return reasonsByRequester
 }
 
-function formatConstraint(
-  constraint: SuggestedUpdate["constrainedBy"][number],
-): string {
+function formatConstraint(constraint: SuggestedUpdate["constrainedBy"][number]): string {
   const requesterText =
     constraint.requesterPath.length > 0
       ? constraint.requesterPath.join(" > ")
@@ -266,9 +254,7 @@ function reasonsForRequests(
   reasonsByRequester: Map<string, RemovalReason[]>,
 ): RemovalReason[] {
   return dedupeByKey(
-    versionInfo.requests.flatMap(
-      (request) => reasonsByRequester.get(request.requesterNodeId) ?? [],
-    ),
+    versionInfo.requests.flatMap(request => reasonsByRequester.get(request.requesterNodeId) ?? []),
     reasonKey,
   )
 }
@@ -282,13 +268,11 @@ function locatedReasonsForRequests(
   versionInfo: DuplicateVersionInfo,
   reasonsByRequester: Map<string, RemovalReason[]>,
 ): LocatedRemovalReason[] {
-  return versionInfo.requests.flatMap((request) =>
-    (reasonsByRequester.get(request.requesterNodeId) ?? []).map((reason) => ({
+  return versionInfo.requests.flatMap(request =>
+    (reasonsByRequester.get(request.requesterNodeId) ?? []).map(reason => ({
       ...reason,
       requesterPath:
-        request.requestPath.length > 0
-          ? request.requestPath
-          : [request.requesterLabel],
+        request.requestPath.length > 0 ? request.requestPath : [request.requesterLabel],
     })),
   )
 }
@@ -298,37 +282,24 @@ function skippedUpdateTargetForVersion(
   versionInfo: DuplicateVersionInfo,
   skippedUpdates: SuggestedUpdate[],
 ): string | undefined {
-  return resolveSuggestedUnlock(
-    duplicate.name,
-    versionInfo.version,
-    skippedUpdates,
-  )?.targetVersion
+  return resolveSuggestedUnlock(duplicate.name, versionInfo.version, skippedUpdates)?.targetVersion
 }
 
 function renderPath(request: DuplicateVersionInfo["requests"][number]): string {
   return request.requestPath.join(" > ")
 }
 
-function formatRequest(
-  request: DuplicateVersionInfo["requests"][number],
-): string {
+function formatRequest(request: DuplicateVersionInfo["requests"][number]): string {
   return `${renderPath(request)}: ${formatEffectiveRange(request)}`
 }
 
-function formatEffectiveRange(request: {
-  range: string
-  overrideRange?: string
-}): string {
+function formatEffectiveRange(request: { range: string; overrideRange?: string }): string {
   return request.overrideRange === undefined
     ? request.range
     : `${request.range} (overridden to ${request.overrideRange})`
 }
 
-function pushSection(
-  lines: string[],
-  title: string,
-  items: (string | string[])[],
-): void {
+function pushSection(lines: string[], title: string, items: (string | string[])[]): void {
   if (items.length === 0) return
 
   lines.push(`    ${title}:`)
@@ -341,10 +312,7 @@ function pushSection(
   }
 }
 
-function formatReason(
-  reason: RemovalReason,
-  displayName: string = reason.packageName,
-): string {
+function formatReason(reason: RemovalReason, displayName: string = reason.packageName): string {
   if (!reason.toVersion) {
     return `${displayName}: ${reason.fromVersion} is removed`
   }
@@ -368,12 +336,9 @@ function formatRemovedAfterLines(reasons: LocatedRemovalReason[]): string[] {
     keysByName.set(reason.packageName, keys)
   }
 
-  const lines = reasons.map((reason) => {
+  const lines = reasons.map(reason => {
     const isAmbiguous = (keysByName.get(reason.packageName)?.size ?? 0) > 1
-    return formatReason(
-      reason,
-      isAmbiguous ? reason.requesterPath.join(" > ") : undefined,
-    )
+    return formatReason(reason, isAmbiguous ? reason.requesterPath.join(" > ") : undefined)
   })
 
   return [...new Set(lines)]
@@ -404,35 +369,24 @@ export function formatDuplicatesReport(
   const skippedUpdates = options?.skippedUpdates ?? []
   const skippedUpdateIds = new Set(skippedUpdates.map(updateIdentity))
   const appliedUpdates = suggestedUpdates.filter(
-    (update) => !skippedUpdateIds.has(updateIdentity(update)),
+    update => !skippedUpdateIds.has(updateIdentity(update)),
   )
   const dedupeReasonsByRequester = buildDedupeReasonsByRequester(duplicates)
-  const appliedUpdateReasonsByRequester =
-    buildUpdateReasonsByRequester(appliedUpdates)
-  const skippedUpdateReasonsByRequester =
-    buildSkippedUpdateReasonsByRequester(skippedUpdates)
+  const appliedUpdateReasonsByRequester = buildUpdateReasonsByRequester(appliedUpdates)
+  const skippedUpdateReasonsByRequester = buildSkippedUpdateReasonsByRequester(skippedUpdates)
 
   const transformedDuplicates =
     suggestedUpdates.length > 0
       ? rewriteCannotDedupeAsOrphan(duplicates, appliedUpdates)
       : duplicates
-  const orphanReasonsByRequester = buildOrphanReasonsByRequester(
-    transformedDuplicates,
-  )
+  const orphanReasonsByRequester = buildOrphanReasonsByRequester(transformedDuplicates)
 
-  const renderDuplicates = transformedDuplicates.map((duplicate) => ({
+  const renderDuplicates = transformedDuplicates.map(duplicate => ({
     ...duplicate,
     versions: duplicate.versions.map((versionInfo): RenderVersionInfo => {
       if (versionInfo.status === "cannot-dedupe") {
-        const manualUpdateReasons = reasonsForRequests(
-          versionInfo,
-          skippedUpdateReasonsByRequester,
-        )
-        const targetVersion = skippedUpdateTargetForVersion(
-          duplicate,
-          versionInfo,
-          skippedUpdates,
-        )
+        const manualUpdateReasons = reasonsForRequests(versionInfo, skippedUpdateReasonsByRequester)
+        const targetVersion = skippedUpdateTargetForVersion(duplicate, versionInfo, skippedUpdates)
 
         if (manualUpdateReasons.length > 0 && targetVersion) {
           return {
@@ -443,13 +397,7 @@ export function formatDuplicatesReport(
           }
         }
 
-        if (
-          isSuggestedTarget(
-            duplicate.name,
-            versionInfo.version,
-            suggestedUpdates,
-          )
-        ) {
+        if (isSuggestedTarget(duplicate.name, versionInfo.version, suggestedUpdates)) {
           return { ...versionInfo, status: "target" }
         }
 
@@ -463,10 +411,7 @@ export function formatDuplicatesReport(
       const removedAfter = dedupeByKey(
         [
           ...locatedReasonsForRequests(versionInfo, dedupeReasonsByRequester),
-          ...locatedReasonsForRequests(
-            versionInfo,
-            appliedUpdateReasonsByRequester,
-          ),
+          ...locatedReasonsForRequests(versionInfo, appliedUpdateReasonsByRequester),
           ...locatedReasonsForRequests(versionInfo, orphanReasonsByRequester),
         ],
         locatedReasonKey,
@@ -482,17 +427,17 @@ export function formatDuplicatesReport(
   const filteredDuplicates = includeUnfixable
     ? renderDuplicates
     : renderDuplicates
-        .filter((duplicate) =>
+        .filter(duplicate =>
           duplicate.versions.some(
-            (version) =>
+            version =>
               version.status === "can-dedupe" ||
               version.status === "orphan" ||
               version.displayStatus === "manual-update",
           ),
         )
-        .map((duplicate) => {
+        .map(duplicate => {
           const versions = duplicate.versions.filter(
-            (version) =>
+            version =>
               version.status === "target" ||
               version.status === "can-dedupe" ||
               version.status === "orphan" ||
@@ -513,26 +458,18 @@ export function formatDuplicatesReport(
       lines.push(`  ${formatVersionLine(versionInfo)}`)
 
       const usedBy = versionInfo.requests.filter(
-        (request) =>
-          evaluateRequestCompatibility(request, versionInfo.version) !== false,
+        request => evaluateRequestCompatibility(request, versionInfo.version) !== false,
       )
       const invalidFor = versionInfo.requests.filter(
-        (request) =>
-          evaluateRequestCompatibility(request, versionInfo.version) === false,
+        request => evaluateRequestCompatibility(request, versionInfo.version) === false,
       )
 
-      if (
-        versionInfo.status === "cannot-dedupe" &&
-        versionInfo.displayStatus !== "manual-update"
-      ) {
+      if (versionInfo.status === "cannot-dedupe" && versionInfo.displayStatus !== "manual-update") {
         const blockedBy: typeof versionInfo.requests = []
         const alsoUsedBy: typeof versionInfo.requests = []
 
         for (const request of usedBy) {
-          const targetCompatible = evaluateRequestCompatibility(
-            request,
-            duplicate.targetVersion,
-          )
+          const targetCompatible = evaluateRequestCompatibility(request, duplicate.targetVersion)
           if (targetCompatible === false) {
             blockedBy.push(request)
           } else {
@@ -546,11 +483,7 @@ export function formatDuplicatesReport(
         pushSection(lines, "used by", usedBy.map(formatRequest))
       }
       pushSection(lines, "invalid for", invalidFor.map(formatRequest))
-      pushSection(
-        lines,
-        "removed after",
-        formatRemovedAfterLines(versionInfo.removedAfter ?? []),
-      )
+      pushSection(lines, "removed after", formatRemovedAfterLines(versionInfo.removedAfter ?? []))
       pushSection(
         lines,
         "can be removed after manual update",

@@ -1,18 +1,13 @@
 import { describe, expect, test } from "bun:test"
 
 import { type BunLockFile, parseBunLock } from "../bunlock"
-import {
-  analyzeDuplicatePackages,
-  evaluateRequestCompatibility,
-} from "./analyze"
+
+import { analyzeDuplicatePackages, evaluateRequestCompatibility } from "./analyze"
 import { dedupeLockText } from "./rewrite"
 
 test("an unsupported override specifier does not fall back", () => {
   expect(
-    evaluateRequestCompatibility(
-      { range: "^8.0.0", overrideRange: "latest" },
-      "8.1.0",
-    ),
+    evaluateRequestCompatibility({ range: "^8.0.0", overrideRange: "latest" }, "8.1.0"),
   ).toBeUndefined()
 })
 
@@ -45,13 +40,9 @@ test("one unknown request keeps a shared version unchanged", () => {
     },
   } satisfies BunLockFile
 
-  const shared = analyzeDuplicatePackages(lock).find(
-    (duplicate) => duplicate.name === "shared",
-  )
+  const shared = analyzeDuplicatePackages(lock).find(duplicate => duplicate.name === "shared")
 
-  expect(
-    shared?.versions.find((version) => version.version === "1.5.0")?.status,
-  ).toBe("unknown")
+  expect(shared?.versions.find(version => version.version === "1.5.0")?.status).toBe("unknown")
 })
 
 test("a workspace request resolves through its registry override", () => {
@@ -72,12 +63,8 @@ test("a workspace request resolves through its registry override", () => {
     },
   } satisfies BunLockFile
 
-  const semver = analyzeDuplicatePackages(lock).find(
-    (duplicate) => duplicate.name === "semver",
-  )
-  const request = semver?.versions
-    .find((version) => version.version === "7.5.4")
-    ?.requests.at(0)
+  const semver = analyzeDuplicatePackages(lock).find(duplicate => duplicate.name === "semver")
+  const request = semver?.versions.find(version => version.version === "7.5.4")?.requests.at(0)
 
   expect(request).toMatchObject({
     requesterNodeId: "workspace:packages/app",
@@ -124,8 +111,8 @@ describe("dedupeLockText", () => {
     expect(result.changed).toBe(true)
     expect(result.lockText).not.toContain("app/mid/leaf")
     expect(
-      duplicates.flatMap((duplicate) =>
-        duplicate.versions.filter((version) => version.status === "can-dedupe"),
+      duplicates.flatMap(duplicate =>
+        duplicate.versions.filter(version => version.status === "can-dedupe"),
       ),
     ).toHaveLength(0)
   })
@@ -196,12 +183,7 @@ describe("dedupeLockText", () => {
       rewrittenPackages: 1,
     })
     expect(result.lockText).not.toContain('"app/shared"')
-    expect(
-      Object.hasOwn(
-        parseBunLock(result.lockText).packages ?? {},
-        "orphan-peer",
-      ),
-    ).toBe(false)
+    expect(Object.hasOwn(parseBunLock(result.lockText).packages ?? {}, "orphan-peer")).toBe(false)
   })
 
   test("does not copy bundled markers out of their original context", () => {

@@ -55,10 +55,7 @@ describe("createProgressRenderer", () => {
       packageName: "short",
     })
 
-    expect(stream.writes).toEqual([
-      `${CLEAR}Checking short [1/3]`,
-      `${CLEAR}Checking short [2/3]`,
-    ])
+    expect(stream.writes).toEqual([`${CLEAR}Checking short [1/3]`, `${CLEAR}Checking short [2/3]`])
   })
 
   test("does not pad shorter lines — clear-and-rewrite handles any length", () => {

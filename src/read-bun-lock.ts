@@ -34,9 +34,7 @@ export function resolveBunLockPath(bunLockPath?: string): string {
     }
     const parent = path.dirname(dir)
     if (parent === dir) {
-      throw new Error(
-        `cannot find ${defaultLockFilename} in ${startDir} or any parent directory`,
-      )
+      throw new Error(`cannot find ${defaultLockFilename} in ${startDir} or any parent directory`)
     }
     dir = parent
   }

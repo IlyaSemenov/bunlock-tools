@@ -2,13 +2,11 @@ import { describe, expect, test } from "bun:test"
 
 import { parseBunLock } from "../bunlock"
 import type { PackageMetadata } from "../registry"
+
 import { analyzeDuplicatePackages } from "./analyze"
 import { classifyUpdateSafety, updateAndDedupeLockText } from "./update-fix"
 
-type FetchFn = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>
+type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 function makeRegistry(
   versionsByPackage: Record<string, string[]>,
@@ -91,9 +89,7 @@ describe("classifyUpdateSafety", () => {
     })
 
     expect(result.applicableUpdates).toEqual([])
-    expect(result.skippedUpdates).toEqual([
-      { ...update, skipReason: "dependency-conflict" },
-    ])
+    expect(result.skippedUpdates).toEqual([{ ...update, skipReason: "dependency-conflict" }])
   })
 })
 

@@ -1,14 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import {
-  mkdir,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  stat,
-  unlink,
-  writeFile,
-} from "node:fs/promises"
+import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 
 import envPaths from "env-paths"
@@ -49,9 +40,7 @@ export function defaultRegistryCacheDir(): string {
   return join(envPaths("bunlock-dedupe", { suffix: "" }).cache, "registry-v1")
 }
 
-export async function clearRegistryCache(
-  cacheDir = defaultRegistryCacheDir(),
-): Promise<string> {
+export async function clearRegistryCache(cacheDir = defaultRegistryCacheDir()): Promise<string> {
   await cleanupPromises.get(cacheDir)
   await rm(cacheDir, { recursive: true, force: true })
   cleanupPromises.delete(cacheDir)
@@ -64,9 +53,7 @@ function cacheFilePath(
   accept: string,
   packageName: string,
 ): string {
-  const key = createHash("sha256")
-    .update(`${registryUrl}\n${accept}\n${packageName}`)
-    .digest("hex")
+  const key = createHash("sha256").update(`${registryUrl}\n${accept}\n${packageName}`).digest("hex")
   return join(cacheDir, key.slice(0, 2), `${key}.json`)
 }
 
@@ -104,10 +91,7 @@ async function readEntry<T>(
   }
 }
 
-async function writeEntry<T>(
-  filePath: string,
-  entry: CacheEntry<T>,
-): Promise<void> {
+async function writeEntry<T>(filePath: string, entry: CacheEntry<T>): Promise<void> {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
   try {
     await mkdir(dirname(filePath), { recursive: true, mode: 0o700 })
@@ -141,19 +125,17 @@ function cleanCache(cacheDir: string, now: number): Promise<void> {
       const prefixDirs = await readdir(cacheDir, { withFileTypes: true })
       await Promise.all(
         prefixDirs
-          .filter((entry) => entry.isDirectory())
-          .map(async (prefixDir) => {
+          .filter(entry => entry.isDirectory())
+          .map(async prefixDir => {
             const prefixPath = join(cacheDir, prefixDir.name)
             const files = await readdir(prefixPath, { withFileTypes: true })
             await Promise.all(
               files
                 .filter(
-                  (entry) =>
-                    entry.isFile() &&
-                    (entry.name.endsWith(".json") ||
-                      entry.name.endsWith(".tmp")),
+                  entry =>
+                    entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".tmp")),
                 )
-                .map(async (entry) => {
+                .map(async entry => {
                   const filePath = join(prefixPath, entry.name)
                   const fileStat = await stat(filePath)
                   if (now - fileStat.mtimeMs >= ENTRY_MAX_AGE_MS) {
@@ -194,9 +176,7 @@ function isFresh<T>(entry: CacheEntry<T>, now: number): boolean {
   const dataFreshness = dataFreshnessMs()
   // A long positive-cache TTL must not hide newly published packages behind a 404.
   const freshness =
-    entry.data === null
-      ? Math.min(MISSING_DATA_FRESHNESS_MS, dataFreshness)
-      : dataFreshness
+    entry.data === null ? Math.min(MISSING_DATA_FRESHNESS_MS, dataFreshness) : dataFreshness
   return age >= 0 && age < freshness
 }
 
@@ -213,17 +193,12 @@ export async function openRegistryCache<T>(
   await cleanCache(options.cacheDir, now())
   const entry = await readEntry(filePath, options.validate)
 
-  const write = (
-    data: T | null,
-    response: Response,
-    previous?: CacheEntry<T>,
-  ): Promise<T | null> =>
+  const write = (data: T | null, response: Response, previous?: CacheEntry<T>): Promise<T | null> =>
     writeEntry(filePath, {
       version: CACHE_VERSION,
       checkedAt: now(),
       etag: response.headers.get("etag") ?? previous?.etag,
-      lastModified:
-        response.headers.get("last-modified") ?? previous?.lastModified,
+      lastModified: response.headers.get("last-modified") ?? previous?.lastModified,
       data,
     }).then(() => data)
 

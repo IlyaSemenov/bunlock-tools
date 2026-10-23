@@ -26,25 +26,19 @@ import { formatRepairReport, repairLockText } from "./repair"
 const commandName = "bunlock-dedupe"
 
 function printUsage(): void {
-  console.log(
-    `${commandName} [path] [--all] [--fix] [--update [--offline|--refresh]]`,
-  )
+  console.log(`${commandName} [path] [--all] [--fix] [--update [--offline|--refresh]]`)
   console.log(`${commandName} --clear-cache`)
   console.log(`${commandName} [path] --repair [--fix] [--refresh]`)
   console.log("")
   console.log("Analyze duplicate bun.lock sub-dependencies.")
   console.log("Use --all to also show packages that cannot be deduped.")
   console.log("Use --fix to rewrite dedupe-compatible entries.")
-  console.log(
-    "Use --update to find intermediate dep updates that unlock deduplication.",
-  )
+  console.log("Use --update to find intermediate dep updates that unlock deduplication.")
   console.log("Use --update --offline to analyze only the local bun cache.")
   console.log("Use --update --refresh to revalidate cached registry data.")
   console.log("Use --clear-cache to remove all persistent registry data.")
   console.log("Use --repair to find incorrect dependency metadata.")
-  console.log(
-    "Use --repair --fix to restore it without updating package versions.",
-  )
+  console.log("Use --repair --fix to restore it without updating package versions.")
 }
 
 function fail(message: string): never {
@@ -159,9 +153,7 @@ async function run(): Promise<void> {
   }
 
   if (values.offline && values.fix) {
-    fail(
-      "--offline cannot be used with --fix because bun cache lacks registry integrity metadata",
-    )
+    fail("--offline cannot be used with --fix because bun cache lacks registry integrity metadata")
   }
 
   const bunLockPath = positionals[0]
@@ -175,8 +167,7 @@ async function run(): Promise<void> {
         onProgress: progress.update,
       })
       progress.end()
-      if (values.fix && result.changed)
-        writeFileSync(lockPath, result.lockText, "utf8")
+      if (values.fix && result.changed) writeFileSync(lockPath, result.lockText, "utf8")
       console.log(formatRepairReport(result, lockPath, values.fix))
     } finally {
       progress.end()
@@ -190,13 +181,12 @@ async function run(): Promise<void> {
     const cache = createPackumentCache()
     const progress = createProgressRenderer(process.stderr)
 
-    const { duplicates, suggestedUpdates } =
-      await analyzeDuplicatePackagesWithUpdates(parsedLock, {
-        offline: values.offline,
-        refresh: values.refresh,
-        cache,
-        onProgress: progress.update,
-      })
+    const { duplicates, suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(parsedLock, {
+      offline: values.offline,
+      refresh: values.refresh,
+      cache,
+      onProgress: progress.update,
+    })
 
     if (values.fix) {
       const result = await updateAndDedupeLockText(lockText, {
@@ -219,15 +209,11 @@ async function run(): Promise<void> {
     }
 
     const dedupeResult = dedupeLockText(lockText)
-    const { skippedUpdates } = await classifyUpdateSafety(
-      lockText,
-      suggestedUpdates,
-      {
-        offline: values.offline,
-        refresh: values.refresh,
-        cache,
-      },
-    )
+    const { skippedUpdates } = await classifyUpdateSafety(lockText, suggestedUpdates, {
+      offline: values.offline,
+      refresh: values.refresh,
+      cache,
+    })
     progress.end()
 
     console.log(

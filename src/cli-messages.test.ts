@@ -102,8 +102,7 @@ describe("formatReportSummary", () => {
       cannotDedupePackages: 3,
     }
     expect(formatReportSummary(summary, lockPath)).toBe(
-      "3 duplicate packages in /project/bun.lock.\n" +
-        "3 packages cannot be deduped.",
+      "3 duplicate packages in /project/bun.lock.\n" + "3 packages cannot be deduped.",
     )
   })
 
@@ -117,8 +116,7 @@ describe("formatReportSummary", () => {
       cannotDedupePackages: 1,
     }
     expect(formatReportSummary(summary, lockPath)).toBe(
-      "1 duplicate package in /project/bun.lock.\n" +
-        "1 package cannot be deduped.",
+      "1 duplicate package in /project/bun.lock.\n" + "1 package cannot be deduped.",
     )
   })
 
@@ -269,10 +267,7 @@ describe("formatReportSummary", () => {
 // --- countCannotDedupePackages ---
 
 describe("countCannotDedupePackages", () => {
-  function makeCannotDedupeGroup(
-    name: string,
-    requesterNodeId: string,
-  ): DuplicatePackageInfo {
+  function makeCannotDedupeGroup(name: string, requesterNodeId: string): DuplicatePackageInfo {
     return {
       name,
       targetVersion: "2.0.0",
@@ -313,10 +308,7 @@ describe("countCannotDedupePackages", () => {
     }
   }
 
-  function makeUpdate(
-    lockKey: string,
-    dependencyName: string,
-  ): SuggestedUpdate {
+  function makeUpdate(lockKey: string, dependencyName: string): SuggestedUpdate {
     return {
       requesterLockKey: lockKey,
       packageName: "blocker",
@@ -329,9 +321,7 @@ describe("countCannotDedupePackages", () => {
           targetVersion: "2.0.0",
         },
       ],
-      constrainedBy: [
-        { requesterLabel: "root", requesterPath: ["root"], range: "^1.0.0" },
-      ],
+      constrainedBy: [{ requesterLabel: "root", requesterPath: ["root"], range: "^1.0.0" }],
     }
   }
 
@@ -450,36 +440,22 @@ describe("formatFixSummary", () => {
   })
 
   test("no-auto-fix, singular", () => {
-    expect(
-      formatFixSummary(
-        { kind: "no-auto-fix", totalDuplicatePackages: 1 },
-        lockPath,
-      ),
-    ).toBe(
+    expect(formatFixSummary({ kind: "no-auto-fix", totalDuplicatePackages: 1 }, lockPath)).toBe(
       "1 duplicate package in /project/bun.lock.\n" + "None can be deduped.",
     )
   })
 
   test("no-auto-fix, plural", () => {
-    expect(
-      formatFixSummary(
-        { kind: "no-auto-fix", totalDuplicatePackages: 3 },
-        lockPath,
-      ),
-    ).toBe(
+    expect(formatFixSummary({ kind: "no-auto-fix", totalDuplicatePackages: 3 }, lockPath)).toBe(
       "3 duplicate packages in /project/bun.lock.\n" + "None can be deduped.",
     )
   })
 
   test("prune-only cleanup", () => {
     expect(
-      formatFixSummary(
-        { kind: "cleaned", removedEntries: 2, remainingPackages: 3 },
-        lockPath,
-      ),
+      formatFixSummary({ kind: "cleaned", removedEntries: 2, remainingPackages: 3 }, lockPath),
     ).toBe(
-      "Removed 2 unreachable entries from /project/bun.lock.\n" +
-        "3 packages cannot be deduped.",
+      "Removed 2 unreachable entries from /project/bun.lock.\n" + "3 packages cannot be deduped.",
     )
   })
 
@@ -529,8 +505,7 @@ describe("formatFixSummary", () => {
         lockPath,
       ),
     ).toBe(
-      "Deduped 1 entry across 1 package in /project/bun.lock.\n" +
-        "1 package cannot be deduped.",
+      "Deduped 1 entry across 1 package in /project/bun.lock.\n" + "1 package cannot be deduped.",
     )
   })
 
@@ -686,9 +661,7 @@ describe("formatUpdateFixReport", () => {
     packageName: "app-blocking",
     fromVersion: "1.0.0",
     toVersion: "1.1.0",
-    deduplicates: [
-      { name: "shared-dep", fromVersion: "1.5.0", targetVersion: "2.1.0" },
-    ],
+    deduplicates: [{ name: "shared-dep", fromVersion: "1.5.0", targetVersion: "2.1.0" }],
     constrainedBy: [
       {
         requesterLabel: "myapp (workspace)",

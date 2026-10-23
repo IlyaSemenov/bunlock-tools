@@ -11,10 +11,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-type FetchFn = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>
+type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 function makeFetch(responses: Record<string, unknown>): FetchFn {
   return async (input: string | URL | Request) => {
@@ -27,9 +24,7 @@ function makeFetch(responses: Record<string, unknown>): FetchFn {
   }
 }
 
-function makeReadDir(
-  entries: Record<string, string[]>,
-): (path: string) => string[] {
+function makeReadDir(entries: Record<string, string[]>): (path: string) => string[] {
   return (path: string) => {
     const result = entries[path]
     if (!result) throw new Error(`ENOENT: ${path}`)
@@ -149,7 +144,7 @@ describe("fetchCompatibleVersions (online)", () => {
         if (calls < 4) throw new Error("network error")
         return new Response(JSON.stringify(abbreviatedMeta), { status: 200 })
       }) as FetchFn,
-      retryDelayFn: async (delayMs) => {
+      retryDelayFn: async delayMs => {
         delays.push(delayMs)
       },
     })
@@ -273,12 +268,7 @@ describe("fetchCompatibleVersions (offline)", () => {
       offline: true,
       cacheDir,
       readDirFn: makeReadDir({
-        "/fake/cache": [
-          "pkg@1.0.0@@@1",
-          "pkg@1.1.0@@@1",
-          "pkg@2.0.0@@@1",
-          "other@1.9.0@@@1",
-        ],
+        "/fake/cache": ["pkg@1.0.0@@@1", "pkg@1.1.0@@@1", "pkg@2.0.0@@@1", "other@1.9.0@@@1"],
       }),
       readFileFn,
     })
@@ -291,11 +281,7 @@ describe("fetchCompatibleVersions (offline)", () => {
       offline: true,
       cacheDir,
       readDirFn: makeReadDir({
-        "/fake/cache/@scope": [
-          "pkg@1.0.0@@@1",
-          "pkg@1.1.0@@@1",
-          "other@1.9.0@@@1",
-        ],
+        "/fake/cache/@scope": ["pkg@1.0.0@@@1", "pkg@1.1.0@@@1", "other@1.9.0@@@1"],
       }),
       readFileFn,
     })
@@ -366,8 +352,7 @@ describe("fetchPackageMetadata (online)", () => {
 
   test("throws RegistryError on malformed registry response", async () => {
     const promise = fetchPackageMetadata("pkg", "1.0.0", {
-      fetchFn: (async () =>
-        new Response("not json", { status: 200 })) as FetchFn,
+      fetchFn: (async () => new Response("not json", { status: 200 })) as FetchFn,
       retryDelayFn: async () => {},
     })
     await expect(promise).rejects.toBeInstanceOf(RegistryError)
@@ -550,11 +535,9 @@ describe("packument cache", () => {
       }),
     ])
 
-    expect(results.map((r) => r.status)).toEqual(["rejected", "rejected"])
+    expect(results.map(r => r.status)).toEqual(["rejected", "rejected"])
     for (const result of results) {
-      expect((result as PromiseRejectedResult).reason).toBeInstanceOf(
-        RegistryError,
-      )
+      expect((result as PromiseRejectedResult).reason).toBeInstanceOf(RegistryError)
     }
     // One shared retry sequence for both readers; the failure is not cached.
     expect(calls).toBe(4)

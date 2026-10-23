@@ -11,6 +11,7 @@ import {
   parseResolvedSpec,
   renderBunLock,
 } from "../bunlock"
+
 import { analyzeDuplicatePackages, type DuplicatePackageInfo } from "./analyze"
 
 type RewriteByPackage = Map<string, Map<string, string>>
@@ -33,9 +34,7 @@ export type DedupeLockResult = {
 }
 
 /** Convert analyzer rows into the package/version rewrite table used by fix. */
-function collectVersionRewrites(
-  duplicates: DuplicatePackageInfo[],
-): RewriteByPackage {
+function collectVersionRewrites(duplicates: DuplicatePackageInfo[]): RewriteByPackage {
   const rewrites: RewriteByPackage = new Map()
 
   for (const duplicate of duplicates) {
@@ -48,8 +47,7 @@ function collectVersionRewrites(
         continue
       }
 
-      const perVersion =
-        rewrites.get(duplicate.name) ?? new Map<string, string>()
+      const perVersion = rewrites.get(duplicate.name) ?? new Map<string, string>()
       perVersion.set(versionInfo.version, versionInfo.dedupeTargetVersion)
       rewrites.set(duplicate.name, perVersion)
     }
@@ -121,18 +119,12 @@ function resolveFallbackLockKey(
   let bestCandidate: string | undefined
   let bestPrefixLength = -1
   for (const key of Object.keys(packages)) {
-    if (
-      key === excludedKey ||
-      !isNestedDependencyLockKey(key, dependencyName)
-    ) {
+    if (key === excludedKey || !isNestedDependencyLockKey(key, dependencyName)) {
       continue
     }
 
     const prefix = key.slice(0, -(dependencyName.length + 1))
-    if (
-      requesterLockKey === prefix ||
-      requesterLockKey?.startsWith(`${prefix}/`)
-    ) {
+    if (requesterLockKey === prefix || requesterLockKey?.startsWith(`${prefix}/`)) {
       if (prefix.length > bestPrefixLength) {
         bestCandidate = key
         bestPrefixLength = prefix.length
@@ -186,12 +178,7 @@ function resolveEntryDependencyLockKey(
   const resolved = parseResolvedSpec(resolvedEntry[0])
   if (!resolved) return resolvedKey
 
-  return isResolvedDependencyReachable(
-    lock,
-    metadata,
-    dependencyName,
-    resolved.version,
-  )
+  return isResolvedDependencyReachable(lock, metadata, dependencyName, resolved.version)
     ? resolvedKey
     : undefined
 }
@@ -204,23 +191,9 @@ function resolvesSameDependencies(
   fallbackKey: string,
 ): boolean {
   return entryDependencyNames(entry).every(
-    (depName) =>
-      resolveEntryDependencyLockKey(
-        lock,
-        packages,
-        entry,
-        nestedKey,
-        depName,
-        "",
-      ) ===
-      resolveEntryDependencyLockKey(
-        lock,
-        packages,
-        entry,
-        fallbackKey,
-        depName,
-        "",
-      ),
+    depName =>
+      resolveEntryDependencyLockKey(lock, packages, entry, nestedKey, depName, "") ===
+      resolveEntryDependencyLockKey(lock, packages, entry, fallbackKey, depName, ""),
   )
 }
 
@@ -272,25 +245,18 @@ function pruneRedundantNestedEntries(
       if (!lockKey.endsWith(`/${parsed.name}`)) continue
 
       const childPrefix = `${lockKey}/`
-      if (Object.keys(packages).some((key) => key.startsWith(childPrefix))) {
+      if (Object.keys(packages).some(key => key.startsWith(childPrefix))) {
         continue
       }
 
       const requesterLockKey = lockKey.slice(0, -(parsed.name.length + 1))
-      const fallbackKey = resolveFallbackLockKey(
-        packages,
-        requesterLockKey,
-        parsed.name,
-        lockKey,
-      )
+      const fallbackKey = resolveFallbackLockKey(packages, requesterLockKey, parsed.name, lockKey)
       if (!fallbackKey) continue
 
       const fallbackEntry = packages[fallbackKey]
       if (!isPackageEntry(fallbackEntry)) continue
       if (JSON.stringify(fallbackEntry) !== JSON.stringify(entry)) continue
-      if (
-        !resolvesSameDependencies(lock, packages, entry, lockKey, fallbackKey)
-      ) {
+      if (!resolvesSameDependencies(lock, packages, entry, lockKey, fallbackKey)) {
         continue
       }
 
@@ -347,14 +313,7 @@ function pruneUnreachableEntries(
     }
 
     for (const dependencyName of Object.keys(workspaceDeps)) {
-      enqueue(
-        resolveFallbackLockKey(
-          packages,
-          workspaceName || undefined,
-          dependencyName,
-          "",
-        ),
-      )
+      enqueue(resolveFallbackLockKey(packages, workspaceName || undefined, dependencyName, ""))
       enqueue(resolveFallbackLockKey(packages, undefined, dependencyName, ""))
     }
   }
@@ -367,16 +326,7 @@ function pruneUnreachableEntries(
     if (!isPackageEntry(entry)) continue
 
     for (const dependencyName of entryDependencyNames(entry)) {
-      enqueue(
-        resolveEntryDependencyLockKey(
-          lock,
-          packages,
-          entry,
-          lockKey,
-          dependencyName,
-          "",
-        ),
-      )
+      enqueue(resolveEntryDependencyLockKey(lock, packages, entry, lockKey, dependencyName, ""))
     }
   }
 
@@ -429,10 +379,7 @@ function rewriteEntries(
       continue
     }
 
-    if (
-      lockKey !== parsed.name &&
-      rootVersions.get(parsed.name) === targetVersion
-    ) {
+    if (lockKey !== parsed.name && rootVersions.get(parsed.name) === targetVersion) {
       const prefix = `${lockKey}/`
       for (const candidateKey of Object.keys(packages)) {
         if (candidateKey === lockKey || candidateKey.startsWith(prefix)) {

@@ -63,7 +63,7 @@ export function createProgressRenderer(
 
   let hasLiveLine = false
 
-  const update: ProgressFn = (progress) => {
+  const update: ProgressFn = progress => {
     const line = `${PHASE_LABELS[progress.phase]} ${progress.packageName} [${progress.current}/${progress.total}]`
     clearAndWrite(line)
     hasLiveLine = true

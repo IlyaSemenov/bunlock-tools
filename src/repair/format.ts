@@ -1,4 +1,5 @@
 import { compareStrings } from "../utils"
+
 import type { RepairResult, RepairSkipReason } from "./restore"
 
 const skipLabels: Record<RepairSkipReason, string> = {
@@ -12,29 +13,20 @@ const skipLabels: Record<RepairSkipReason, string> = {
 }
 
 /** Render restored declarations and remaining issues without implying version updates. */
-export function formatRepairReport(
-  result: RepairResult,
-  lockPath: string,
-  fixed = false,
-): string {
+export function formatRepairReport(result: RepairResult, lockPath: string, fixed = false): string {
   const lines: string[] = []
   for (const entry of result.repairedEntries) {
     lines.push(`${entry.lockKey}:`)
     for (const change of entry.changes) {
       if (change.field === "optionalPeers") {
-        const before =
-          (change.before as string[] | undefined)?.join(", ") || "(none)"
-        const after =
-          (change.after as string[] | undefined)?.join(", ") || "(none)"
+        const before = (change.before as string[] | undefined)?.join(", ") || "(none)"
+        const after = (change.after as string[] | undefined)?.join(", ") || "(none)"
         lines.push(`  optionalPeers: ${before} → ${after}`)
       } else {
         const before = change.before as Record<string, string> | undefined
         const after = change.after as Record<string, string> | undefined
         for (const name of [
-          ...new Set([
-            ...Object.keys(before ?? {}),
-            ...Object.keys(after ?? {}),
-          ]),
+          ...new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]),
         ].sort(compareStrings)) {
           if (before?.[name] === after?.[name]) continue
           lines.push(
@@ -67,11 +59,8 @@ export function formatRepairReport(
         `  - ${conflict.lockKey} > ${conflict.dependencyName}: ${conflict.range} (locked: ${conflict.resolvedVersion ?? "missing"})`,
       )
     }
-    lines.push(
-      "Repair preserves package versions; resolve these conflicts separately.",
-    )
+    lines.push("Repair preserves package versions; resolve these conflicts separately.")
   }
-  if (count && !fixed)
-    lines.push("", "Run with --repair --fix to restore dependency metadata.")
+  if (count && !fixed) lines.push("", "Run with --repair --fix to restore dependency metadata.")
   return lines.join("\n")
 }

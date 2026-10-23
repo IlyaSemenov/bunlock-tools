@@ -16,18 +16,10 @@ import {
   resolveDependencyLockKey,
 } from "../bunlock"
 import type { ProgressFn } from "../progress"
-import {
-  createPackumentCache,
-  fetchPackageMetadata,
-  type PackageMetadata,
-} from "../registry"
+import { createPackumentCache, fetchPackageMetadata, type PackageMetadata } from "../registry"
 import { compareStrings } from "../utils"
 
-const dependencyFields = [
-  "dependencies",
-  "optionalDependencies",
-  "peerDependencies",
-] as const
+const dependencyFields = ["dependencies", "optionalDependencies", "peerDependencies"] as const
 
 type MetadataField = (typeof dependencyFields)[number] | "optionalPeers"
 
@@ -94,7 +86,7 @@ function validMetadata(meta: PackageMetadata, version: string): boolean {
       !value ||
       typeof value !== "object" ||
       Array.isArray(value) ||
-      Object.values(value).some((range) => typeof range !== "string")
+      Object.values(value).some(range => typeof range !== "string")
     )
       return false
   }
@@ -104,7 +96,7 @@ function validMetadata(meta: PackageMetadata, version: string): boolean {
       typeof meta.peerDependenciesMeta !== "object" ||
       Array.isArray(meta.peerDependenciesMeta) ||
       Object.values(meta.peerDependenciesMeta).some(
-        (value) =>
+        value =>
           !value ||
           typeof value !== "object" ||
           Array.isArray(value) ||
@@ -121,20 +113,12 @@ function integritySkipReason(
   integrity: string | undefined,
   meta: PackageMetadata,
 ): "no-integrity" | "integrity-mismatch" | undefined {
-  const published =
-    typeof meta.dist?.integrity === "string"
-      ? meta.dist.integrity.split(/\s+/)
-      : []
-  if (
-    typeof meta.dist?.shasum === "string" &&
-    /^[a-f\d]{40}$/i.test(meta.dist.shasum)
-  ) {
-    published.push(
-      `sha1-${Buffer.from(meta.dist.shasum, "hex").toString("base64")}`,
-    )
+  const published = typeof meta.dist?.integrity === "string" ? meta.dist.integrity.split(/\s+/) : []
+  if (typeof meta.dist?.shasum === "string" && /^[a-f\d]{40}$/i.test(meta.dist.shasum)) {
+    published.push(`sha1-${Buffer.from(meta.dist.shasum, "hex").toString("base64")}`)
   }
   if (!integrity || published.length === 0) return "no-integrity"
-  if (!integrity.split(/\s+/).some((hash) => published.includes(hash))) {
+  if (!integrity.split(/\s+/).some(hash => published.includes(hash))) {
     return "integrity-mismatch"
   }
   return undefined
@@ -155,10 +139,7 @@ export async function repairLockText(
   const packages = lock.packages ?? {}
   const groups = new Map<string, Set<string>>()
   const patched = lock.patchedDependencies ?? {}
-  const skips = new Map<
-    string,
-    Omit<RepairResult["skippedEntries"][number], "lockKey">
-  >()
+  const skips = new Map<string, Omit<RepairResult["skippedEntries"][number], "lockKey">>()
   const specs = new Map(
     Object.entries(packages).flatMap(([key, entry]) => {
       const spec = isPackageEntry(entry) ? parseResolvedSpec(entry[0]) : null
@@ -220,8 +201,7 @@ export async function repairLockText(
   const repairedEntries: RepairedEntry[] = []
   const verifiedKeys = new Set<string>()
   for (const [lockKey, entry] of Object.entries(packages)) {
-    if (!isPackageEntry(entry) || skips.has(lockKey) || !metadata.has(entry[0]))
-      continue
+    if (!isPackageEntry(entry) || skips.has(lockKey) || !metadata.has(entry[0])) continue
     const meta = metadata.get(entry[0])
     if (!meta) {
       skips.set(lockKey, { reason: "metadata-unavailable" })
@@ -240,17 +220,14 @@ export async function repairLockText(
     // Keep bin, platform restrictions, bundled, and unknown tuple metadata.
     const after = { ...before }
     for (const field of dependencyFields) {
-      const dependencies = Object.entries(meta[field] ?? {}).sort(
-        ([left], [right]) => compareStrings(left, right),
+      const dependencies = Object.entries(meta[field] ?? {}).sort(([left], [right]) =>
+        compareStrings(left, right),
       )
       if (dependencies.length) after[field] = Object.fromEntries(dependencies)
       else delete after[field]
     }
     const optionalPeers = Object.entries(meta.peerDependenciesMeta ?? {})
-      .filter(
-        ([name, value]) =>
-          value.optional && Object.hasOwn(meta.peerDependencies ?? {}, name),
-      )
+      .filter(([name, value]) => value.optional && Object.hasOwn(meta.peerDependencies ?? {}, name))
       .map(([name]) => name)
       .sort(compareStrings)
     if (optionalPeers.length) after.optionalPeers = optionalPeers
@@ -261,12 +238,10 @@ export async function repairLockText(
     // runtime dependency optional. No repair changes lock keys, so lookup is stable.
     const requiredNames = new Set([
       ...Object.keys(after.dependencies ?? {}),
-      ...Object.keys(after.peerDependencies ?? {}).filter(
-        (name) => !optionalPeers.includes(name),
-      ),
+      ...Object.keys(after.peerDependencies ?? {}).filter(name => !optionalPeers.includes(name)),
     ])
     const missingDependencies = [...requiredNames]
-      .filter((name) => !resolveDependencyLockKey(lockKey, name, specs))
+      .filter(name => !resolveDependencyLockKey(lockKey, name, specs))
       .sort(compareStrings)
     if (missingDependencies.length) {
       skips.set(lockKey, {
@@ -280,9 +255,7 @@ export async function repairLockText(
     const changes: RepairChange[] = []
     for (const field of [...dependencyFields, "optionalPeers"] as const) {
       const oldValue =
-        field === "optionalPeers"
-          ? before.optionalPeers?.toSorted(compareStrings)
-          : before[field]
+        field === "optionalPeers" ? before.optionalPeers?.toSorted(compareStrings) : before[field]
       if (!isDeepStrictEqual(oldValue, after[field])) {
         changes.push({ field, before: before[field], after: after[field] })
       }
@@ -302,29 +275,14 @@ export async function repairLockText(
       ...meta.optionalDependencies,
       ...meta.peerDependencies,
     }
-    for (const [dependencyName, declaredRange] of Object.entries(
-      dependencies,
-    )) {
+    for (const [dependencyName, declaredRange] of Object.entries(dependencies)) {
       // Absent or incompatible optional peers are legitimate; absent optional
       // dependencies can also be platform-specific and need no installation.
       if (isOptionalPeerDependency(meta, dependencyName)) continue
-      const range = effectiveDependencyRange(
-        lock,
-        dependencyName,
-        declaredRange,
-      )
-      const resolvedKey = resolveDependencyLockKey(
-        lockKey,
-        dependencyName,
-        specs,
-      )
-      const resolvedVersion = resolvedKey
-        ? specs.get(resolvedKey)?.version
-        : undefined
-      if (
-        !resolvedVersion &&
-        Object.hasOwn(meta.optionalDependencies ?? {}, dependencyName)
-      )
+      const range = effectiveDependencyRange(lock, dependencyName, declaredRange)
+      const resolvedKey = resolveDependencyLockKey(lockKey, dependencyName, specs)
+      const resolvedVersion = resolvedKey ? specs.get(resolvedKey)?.version : undefined
+      if (!resolvedVersion && Object.hasOwn(meta.optionalDependencies ?? {}, dependencyName))
         continue
       if (
         resolvedVersion

@@ -13,11 +13,8 @@ import {
   renderBunLock,
   resolveDependencyLockKey,
 } from "../bunlock"
-import {
-  createPackumentCache,
-  fetchPackageMetadata,
-  type PackageMetadata,
-} from "../registry"
+import { createPackumentCache, fetchPackageMetadata, type PackageMetadata } from "../registry"
+
 import type { DedupeLockResult } from "./rewrite"
 import { dedupeLockText } from "./rewrite"
 import {
@@ -73,9 +70,7 @@ type ApplicableUpdate = {
 
 function sortRecord<T>(record: Record<string, T>): Record<string, T> {
   return Object.fromEntries(
-    Object.entries(record).sort(
-      ([left], [right]) => +(left > right) - +(left < right),
-    ),
+    Object.entries(record).sort(([left], [right]) => +(left > right) - +(left < right)),
   )
 }
 
@@ -109,9 +104,7 @@ function metadataToLockMeta(meta: PackageMetadata): BunPackageMeta {
 function collectOptionalPeerNames(meta: PackageMetadata): Set<string> {
   const optionalPeers = new Set(meta.optionalPeers ?? [])
 
-  for (const [name, peerMeta] of Object.entries(
-    meta.peerDependenciesMeta ?? {},
-  )) {
+  for (const [name, peerMeta] of Object.entries(meta.peerDependenciesMeta ?? {})) {
     if (peerMeta?.optional === true) optionalPeers.add(name)
   }
 
@@ -188,16 +181,13 @@ function dependencyReuseSkipReason(
   specsByLockKey: Map<string, { name: string; version: string }>,
   lock: Pick<BunLockFile, "overrides">,
 ): "new-dependencies" | "unsupported-range" | undefined {
-  for (const [dependencyName, range] of Object.entries(
-    requiredDependencyRanges(meta, lock),
-  )) {
+  for (const [dependencyName, range] of Object.entries(requiredDependencyRanges(meta, lock))) {
     const validRange = semver.validRange(range)
     if (!validRange) return "unsupported-range"
 
     const hasCompatibleEntry = [...specsByLockKey.values()].some(
-      (resolvedSpec) =>
-        resolvedSpec.name === dependencyName &&
-        semver.satisfies(resolvedSpec.version, validRange),
+      resolvedSpec =>
+        resolvedSpec.name === dependencyName && semver.satisfies(resolvedSpec.version, validRange),
     )
     if (!hasCompatibleEntry) {
       return "new-dependencies"
@@ -234,19 +224,15 @@ async function assessSuggestedUpdates(
       continue
     }
 
-    const meta = await fetchPackageMetadata(
-      update.packageName,
-      update.toVersion,
-      {
-        offline: options?.offline,
-        refresh: options?.refresh,
-        cacheDir: options?.cacheDir,
-        fetchFn: options?.fetchFn,
-        readDirFn: options?.readDirFn,
-        readFileFn: options?.readFileFn,
-        cache: options?.cache,
-      },
-    )
+    const meta = await fetchPackageMetadata(update.packageName, update.toVersion, {
+      offline: options?.offline,
+      refresh: options?.refresh,
+      cacheDir: options?.cacheDir,
+      fetchFn: options?.fetchFn,
+      readDirFn: options?.readDirFn,
+      readFileFn: options?.readFileFn,
+      cache: options?.cache,
+    })
     if (!meta) {
       skippedUpdates.push({ ...update, skipReason: "metadata-unavailable" })
       continue
@@ -258,11 +244,7 @@ async function assessSuggestedUpdates(
       skippedUpdates.push({ ...update, skipReason: "no-integrity" })
       continue
     }
-    const reuseSkipReason = dependencyReuseSkipReason(
-      meta,
-      specsByLockKey,
-      lock,
-    )
+    const reuseSkipReason = dependencyReuseSkipReason(meta, specsByLockKey, lock)
     if (reuseSkipReason) {
       skippedUpdates.push({ ...update, skipReason: reuseSkipReason })
       continue
@@ -337,31 +319,20 @@ function findContextConflicts(
     // Dedupe may rewrite or prune the updated entry itself; a surviving tuple
     // with a different spec came from elsewhere in the lockfile and its
     // metadata was already consistent there.
-    if (
-      !isPackageEntry(entry) ||
-      entry[0] !== `${update.packageName}@${update.toVersion}`
-    ) {
+    if (!isPackageEntry(entry) || entry[0] !== `${update.packageName}@${update.toVersion}`) {
       continue
     }
 
-    for (const [dependencyName, range] of Object.entries(
-      requiredDependencyRanges(meta, lock),
-    )) {
+    for (const [dependencyName, range] of Object.entries(requiredDependencyRanges(meta, lock))) {
       const resolvedKey = resolveDependencyLockKey(
         update.requesterLockKey,
         dependencyName,
         specsByLockKey,
       )
-      const resolvedSpec = resolvedKey
-        ? specsByLockKey.get(resolvedKey)
-        : undefined
+      const resolvedSpec = resolvedKey ? specsByLockKey.get(resolvedKey) : undefined
       const validRange = semver.validRange(range)
 
-      if (
-        !resolvedSpec ||
-        !validRange ||
-        !semver.satisfies(resolvedSpec.version, validRange)
-      ) {
+      if (!resolvedSpec || !validRange || !semver.satisfies(resolvedSpec.version, validRange)) {
         conflicts.add(applicable)
         break
       }
@@ -394,11 +365,7 @@ async function planAndApplyUpdates(
   updates: SuggestedUpdate[],
   options?: UpdateAnalysisOptions,
 ): Promise<UpdatePlan> {
-  const assessment = await assessSuggestedUpdates(
-    parseBunLock(lockText),
-    updates,
-    options,
-  )
+  const assessment = await assessSuggestedUpdates(parseBunLock(lockText), updates, options)
   let applicableUpdates = assessment.applicableUpdates
   const skippedUpdates = [...assessment.skippedUpdates]
 
@@ -408,12 +375,9 @@ async function planAndApplyUpdates(
     parsedLock.packages = packages
 
     const updateResult = applyApplicableUpdates(packages, applicableUpdates)
-    const afterUpdatesText =
-      updateResult.updatedEntries > 0 ? renderBunLock(parsedLock) : lockText
+    const afterUpdatesText = updateResult.updatedEntries > 0 ? renderBunLock(parsedLock) : lockText
     const dedupeResult = dedupeLockText(afterUpdatesText)
-    const finalText = dedupeResult.changed
-      ? dedupeResult.lockText
-      : afterUpdatesText
+    const finalText = dedupeResult.changed ? dedupeResult.lockText : afterUpdatesText
 
     const conflicts = findContextConflicts(finalText, applicableUpdates)
     if (conflicts.size === 0) {
@@ -432,9 +396,7 @@ async function planAndApplyUpdates(
         skipReason: "dependency-conflict",
       })
     }
-    applicableUpdates = applicableUpdates.filter(
-      (applicable) => !conflicts.has(applicable),
-    )
+    applicableUpdates = applicableUpdates.filter(applicable => !conflicts.has(applicable))
   }
 }
 
@@ -468,18 +430,10 @@ export async function updateAndDedupeLockText(
   // its report) instead of re-running the registry-bound pass twice.
   const suggestedUpdates =
     options?.suggestedUpdates ??
-    (
-      await analyzeDuplicatePackagesWithUpdates(
-        parseBunLock(lockText),
-        sharedOptions,
-      )
-    ).suggestedUpdates
+    (await analyzeDuplicatePackagesWithUpdates(parseBunLock(lockText), sharedOptions))
+      .suggestedUpdates
 
-  const plan = await planAndApplyUpdates(
-    lockText,
-    suggestedUpdates,
-    sharedOptions,
-  )
+  const plan = await planAndApplyUpdates(lockText, suggestedUpdates, sharedOptions)
   const { updateResult, dedupeResult, afterUpdatesText } = plan
 
   return {

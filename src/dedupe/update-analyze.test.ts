@@ -2,13 +2,11 @@ import { describe, expect, test } from "bun:test"
 
 import type { BunLockFile, BunPackageEntry } from "../bunlock"
 import type { PackageMetadata } from "../registry"
+
 import { formatDuplicatesReport } from "./format"
 import { analyzeDuplicatePackagesWithUpdates } from "./update-analyze"
 
-type FetchFn = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>
+type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 function makeRegistry(
   versionsByPackage: Record<string, string[]>,
@@ -50,12 +48,7 @@ function makeRegistry(
 
 function lockWithCannotDedupe() {
   const packages: Record<string, BunPackageEntry> = {
-    "app-blocking": [
-      "app-blocking@1.0.0",
-      "",
-      { dependencies: { "shared-dep": "^1.0.0" } },
-      "sha",
-    ],
+    "app-blocking": ["app-blocking@1.0.0", "", { dependencies: { "shared-dep": "^1.0.0" } }, "sha"],
     "app-blocking/shared-dep": ["shared-dep@1.5.0", "", {}, "sha"],
     "shared-dep": ["shared-dep@2.1.0", "", {}, "sha"],
   }
@@ -122,10 +115,12 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
       },
     )
 
-    const { duplicates, suggestedUpdates } =
-      await analyzeDuplicatePackagesWithUpdates(lockWithCannotDedupe(), {
+    const { duplicates, suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(
+      lockWithCannotDedupe(),
+      {
         fetchFn: registry,
-      })
+      },
+    )
 
     expect(duplicates).toHaveLength(1)
     expect(duplicates[0]?.name).toBe("shared-dep")
@@ -146,9 +141,7 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
         packageName: "app-blocking",
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
-        deduplicates: [
-          { name: "shared-dep", fromVersion: "1.5.0", targetVersion: "2.1.0" },
-        ],
+        deduplicates: [{ name: "shared-dep", fromVersion: "1.5.0", targetVersion: "2.1.0" }],
         constrainedBy: [
           {
             requesterLabel: "myapp (workspace)",
@@ -173,14 +166,14 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
       },
     )
 
-    const { duplicates, suggestedUpdates } =
-      await analyzeDuplicatePackagesWithUpdates(lockWithCannotDedupe(), {
+    const { duplicates, suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(
+      lockWithCannotDedupe(),
+      {
         fetchFn: registry,
-      })
-
-    const blockedVersion = duplicates[0]?.versions.find(
-      (version) => version.version === "1.5.0",
+      },
     )
+
+    const blockedVersion = duplicates[0]?.versions.find(version => version.version === "1.5.0")
 
     expect(blockedVersion?.status).toBe("cannot-dedupe")
     expect(blockedVersion?.requests).toEqual([
@@ -207,15 +200,17 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
       },
     )
 
-    const { duplicates, suggestedUpdates } =
-      await analyzeDuplicatePackagesWithUpdates(lockWithCannotDedupe(), {
+    const { duplicates, suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(
+      lockWithCannotDedupe(),
+      {
         fetchFn: registry,
-      })
+      },
+    )
 
     const report = formatDuplicatesReport(duplicates, {
       includeUnfixable: false,
       suggestedUpdates,
-      skippedUpdates: suggestedUpdates.map((update) => ({
+      skippedUpdates: suggestedUpdates.map(update => ({
         ...update,
         skipReason: "new-dependencies" as const,
       })),
@@ -225,9 +220,7 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
     expect(report).toContain("- app-blocking: 1.0.0 → 1.1.0")
     expect(report).toContain("required by:")
     expect(report).toContain("- myapp: ^1.0.0")
-    expect(report).toContain(
-      "held back: update adds dependencies missing from the lockfile",
-    )
+    expect(report).toContain("held back: update adds dependencies missing from the lockfile")
   })
 
   test("lists each requiredBy constraint on its own indented line", async () => {
@@ -243,14 +236,16 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
       },
     )
 
-    const { duplicates, suggestedUpdates } =
-      await analyzeDuplicatePackagesWithUpdates(lockWithCannotDedupe(), {
+    const { duplicates, suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(
+      lockWithCannotDedupe(),
+      {
         fetchFn: registry,
-      })
+      },
+    )
 
     // Replace the single inbound constraint with several so the report has to
     // render more than one `required by` line.
-    const skippedUpdates = suggestedUpdates.map((update) => ({
+    const skippedUpdates = suggestedUpdates.map(update => ({
       ...update,
       skipReason: "new-dependencies" as const,
       constrainedBy: [
@@ -335,10 +330,9 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
       },
     )
 
-    const { suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(
-      lock,
-      { fetchFn: registry },
-    )
+    const { suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(lock, {
+      fetchFn: registry,
+    })
 
     expect(suggestedUpdates).toEqual([])
   })
@@ -395,10 +389,9 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
       },
     )
 
-    const { suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(
-      lock,
-      { fetchFn: registry },
-    )
+    const { suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(lock, {
+      fetchFn: registry,
+    })
 
     expect(suggestedUpdates).toHaveLength(1)
     expect(suggestedUpdates[0]?.deduplicates).toEqual([
@@ -409,17 +402,15 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
   test("returns no suggestions when no compatible newer version exists", async () => {
     const registry = makeRegistry({ "app-blocking": ["1.0.0"] }, {})
 
-    const { duplicates, suggestedUpdates } =
-      await analyzeDuplicatePackagesWithUpdates(lockWithCannotDedupe(), {
+    const { duplicates, suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(
+      lockWithCannotDedupe(),
+      {
         fetchFn: registry,
-      })
+      },
+    )
 
     expect(duplicates).toHaveLength(1)
-    expect(
-      duplicates[0]?.versions.some(
-        (version) => version.status === "cannot-dedupe",
-      ),
-    ).toBe(true)
+    expect(duplicates[0]?.versions.some(version => version.status === "cannot-dedupe")).toBe(true)
     expect(suggestedUpdates).toEqual([])
   })
 
@@ -439,8 +430,7 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
     const events: { phase: string; current: number; total: number }[] = []
     await analyzeDuplicatePackagesWithUpdates(lockWithCannotDedupe(), {
       fetchFn: registry,
-      onProgress: (p) =>
-        events.push({ phase: p.phase, current: p.current, total: p.total }),
+      onProgress: p => events.push({ phase: p.phase, current: p.current, total: p.total }),
     })
 
     expect(events).toEqual([{ phase: "analyze", current: 1, total: 1 }])

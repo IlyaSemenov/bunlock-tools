@@ -1,6 +1,10 @@
 pre-commit:
   commands:
-    biome:
-      glob: "**/*.{js,ts,mjs,cjs,json,jsonc}"
-      run: ./node_modules/.bin/biome check --write {staged_files}
+    oxlint:
+      glob: "**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,vue}"
+      run: ./node_modules/.bin/oxlint --fix {staged_files}
+      stage_fixed: true
+    oxfmt:
+      glob: "**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,md,yaml,yml,vue,css,scss,html}"
+      run: ./node_modules/.bin/oxfmt {staged_files}
       stage_fixed: true

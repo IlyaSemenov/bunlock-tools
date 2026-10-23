@@ -71,12 +71,7 @@ export type DependencyGraph = {
  * `orphan` means the version may be incompatible by itself, but every path to
  * it disappears after another dedupe rewrite.
  */
-export type DedupeStatus =
-  | "target"
-  | "can-dedupe"
-  | "cannot-dedupe"
-  | "unknown"
-  | "orphan"
+export type DedupeStatus = "target" | "can-dedupe" | "cannot-dedupe" | "unknown" | "orphan"
 
 export type DuplicateVersionInfo = {
   version: string
@@ -132,13 +127,8 @@ function compareVersionDescending(left: string, right: string): number {
 }
 
 /** Return the declared range unless bun.lock provides an override. */
-export function effectiveRequestRange(request: {
-  range: string
-  overrideRange?: string
-}): string {
-  return request.overrideRange === undefined
-    ? request.range
-    : request.overrideRange
+export function effectiveRequestRange(request: { range: string; overrideRange?: string }): string {
+  return request.overrideRange === undefined ? request.range : request.overrideRange
 }
 
 /**
@@ -151,10 +141,7 @@ export function evaluateRequestCompatibility(
   request: Pick<DependencyRequest, "range" | "overrideRange">,
   targetVersion: string,
 ): boolean | undefined {
-  return evaluateRangeCompatibility(
-    effectiveRequestRange(request),
-    targetVersion,
-  )
+  return evaluateRangeCompatibility(effectiveRequestRange(request), targetVersion)
 }
 
 function workspaceNodeId(workspacePath: string): string {
@@ -167,19 +154,13 @@ function ensureNode(adjacency: Map<string, Set<string>>, nodeId: string): void {
   }
 }
 
-function addEdge(
-  adjacency: Map<string, Set<string>>,
-  fromNodeId: string,
-  toNodeId: string,
-): void {
+function addEdge(adjacency: Map<string, Set<string>>, fromNodeId: string, toNodeId: string): void {
   ensureNode(adjacency, fromNodeId)
   ensureNode(adjacency, toNodeId)
   adjacency.get(fromNodeId)?.add(toNodeId)
 }
 
-function collectResolvedPackages(
-  lock: BunLockFile,
-): Map<string, ResolvedPackage> {
+function collectResolvedPackages(lock: BunLockFile): Map<string, ResolvedPackage> {
   const resolved = new Map<string, ResolvedPackage>()
 
   for (const [lockKey, entry] of Object.entries(lock.packages ?? {})) {
@@ -200,14 +181,10 @@ function collectResolvedPackages(
       name: parsedSpec.name,
       version: parsedSpec.version,
       dependencies: normalizeDependencyMap(metadata.dependencies),
-      optionalDependencies: normalizeDependencyMap(
-        metadata.optionalDependencies,
-      ),
+      optionalDependencies: normalizeDependencyMap(metadata.optionalDependencies),
       peerDependencies: normalizeDependencyMap(metadata.peerDependencies),
       optionalPeers: Array.isArray(metadata.optionalPeers)
-        ? metadata.optionalPeers.filter(
-            (name): name is string => typeof name === "string",
-          )
+        ? metadata.optionalPeers.filter((name): name is string => typeof name === "string")
         : [],
     })
   }
@@ -238,9 +215,7 @@ function collectDependencyGraph(
   const workspaceNameToNodeId = new Map<string, string>()
   let rootNodeId: string | undefined
 
-  for (const [workspacePath, workspace] of Object.entries(
-    lock.workspaces ?? {},
-  )) {
+  for (const [workspacePath, workspace] of Object.entries(lock.workspaces ?? {})) {
     const nodeId = workspaceNodeId(workspacePath)
     workspaceIdsByPath.set(workspacePath, nodeId)
 
@@ -297,9 +272,7 @@ function collectDependencyGraph(
     })
   }
 
-  for (const [workspacePath, workspace] of Object.entries(
-    lock.workspaces ?? {},
-  )) {
+  for (const [workspacePath, workspace] of Object.entries(lock.workspaces ?? {})) {
     const requesterNodeId = workspaceIdsByPath.get(workspacePath)
     if (!requesterNodeId) {
       continue
@@ -325,11 +298,7 @@ function collectDependencyGraph(
 
       const resolvedNodeId =
         workspaceTargetNodeId ??
-        resolveDependencyLockKey(
-          workspaceName,
-          dependencyName,
-          packagesByLockKey,
-        ) ??
+        resolveDependencyLockKey(workspaceName, dependencyName, packagesByLockKey) ??
         resolveDependencyLockKey(undefined, dependencyName, packagesByLockKey)
 
       if (!resolvedNodeId) {
@@ -361,12 +330,7 @@ function collectDependencyGraph(
       const resolvedPackage = packagesByLockKey.get(resolvedNodeId)
       if (
         resolvedPackage &&
-        !isResolvedDependencyReachable(
-          lock,
-          packageEntry,
-          dependencyName,
-          resolvedPackage.version,
-        )
+        !isResolvedDependencyReachable(lock, packageEntry, dependencyName, resolvedPackage.version)
       ) {
         continue
       }
@@ -443,9 +407,7 @@ function attachRequestPaths(graph: DependencyGraph): void {
     }
 
     pathNodeIds.reverse()
-    return pathNodeIds.map(
-      (pathNodeId) => graph.nodeLabels.get(pathNodeId) ?? pathNodeId,
-    )
+    return pathNodeIds.map(pathNodeId => graph.nodeLabels.get(pathNodeId) ?? pathNodeId)
   }
 
   for (const request of graph.requests) {
@@ -453,9 +415,7 @@ function attachRequestPaths(graph: DependencyGraph): void {
   }
 }
 
-function collectVersionRewrites(
-  duplicates: DuplicatePackageInfo[],
-): RewriteByPackage {
+function collectVersionRewrites(duplicates: DuplicatePackageInfo[]): RewriteByPackage {
   const rewrites: RewriteByPackage = new Map()
 
   for (const duplicate of duplicates) {
@@ -468,8 +428,7 @@ function collectVersionRewrites(
         continue
       }
 
-      const perVersion =
-        rewrites.get(duplicate.name) ?? new Map<string, string>()
+      const perVersion = rewrites.get(duplicate.name) ?? new Map<string, string>()
       perVersion.set(versionInfo.version, versionInfo.dedupeTargetVersion)
       rewrites.set(duplicate.name, perVersion)
     }
@@ -502,17 +461,12 @@ function duplicateVersionKey(name: string, version: string): string {
   return `${name}@${version}`
 }
 
-function collectDuplicateStatuses(
-  duplicates: DuplicatePackageInfo[],
-): Map<string, DedupeStatus> {
+function collectDuplicateStatuses(duplicates: DuplicatePackageInfo[]): Map<string, DedupeStatus> {
   const statuses = new Map<string, DedupeStatus>()
 
   for (const duplicate of duplicates) {
     for (const versionInfo of duplicate.versions) {
-      statuses.set(
-        duplicateVersionKey(duplicate.name, versionInfo.version),
-        versionInfo.status,
-      )
+      statuses.set(duplicateVersionKey(duplicate.name, versionInfo.version), versionInfo.status)
     }
   }
 
@@ -524,17 +478,14 @@ function requestHasOrphanRequester(
   context: OrphanDetectionContext,
   duplicateStatuses: Map<string, DedupeStatus>,
 ): boolean {
-  const requesterPackage = context.packagesByLockKey.get(
-    request.requesterNodeId,
-  )
+  const requesterPackage = context.packagesByLockKey.get(request.requesterNodeId)
   if (!requesterPackage) {
     return false
   }
 
   return (
-    duplicateStatuses.get(
-      duplicateVersionKey(requesterPackage.name, requesterPackage.version),
-    ) === "orphan"
+    duplicateStatuses.get(duplicateVersionKey(requesterPackage.name, requesterPackage.version)) ===
+    "orphan"
   )
 }
 
@@ -548,9 +499,7 @@ function requestWillBeRemovedByRequesterRewrite(
   requestedVersion: string,
   context: OrphanDetectionContext,
 ): boolean {
-  const requesterPackage = context.packagesByLockKey.get(
-    request.requesterNodeId,
-  )
+  const requesterPackage = context.packagesByLockKey.get(request.requesterNodeId)
   if (!requesterPackage) {
     return false
   }
@@ -558,16 +507,11 @@ function requestWillBeRemovedByRequesterRewrite(
   const requesterTargetVersion = context.rewrites
     .get(requesterPackage.name)
     ?.get(requesterPackage.version)
-  if (
-    !requesterTargetVersion ||
-    requesterTargetVersion === requesterPackage.version
-  ) {
+  if (!requesterTargetVersion || requesterTargetVersion === requesterPackage.version) {
     return false
   }
 
-  const templateLockKey = context.templates
-    .get(requesterPackage.name)
-    ?.get(requesterTargetVersion)
+  const templateLockKey = context.templates.get(requesterPackage.name)?.get(requesterTargetVersion)
   if (!templateLockKey) {
     return false
   }
@@ -598,9 +542,7 @@ function requestWillBeRemovedByRequesterRewrite(
  * Analyze duplicate package versions and classify which versions can be
  * rewritten safely using only entries already present in the lockfile.
  */
-export function analyzeDuplicatePackages(
-  lock: BunLockFile,
-): DuplicatePackageInfo[] {
+export function analyzeDuplicatePackages(lock: BunLockFile): DuplicatePackageInfo[] {
   const packagesByLockKey = collectResolvedPackages(lock)
   const graph = collectDependencyGraph(lock, packagesByLockKey)
   attachRequestPaths(graph)
@@ -629,7 +571,7 @@ export function analyzeDuplicatePackages(
 
   const duplicates: DuplicatePackageInfo[] = []
   for (const [name, packageEntries] of packagesByName.entries()) {
-    const versionSet = new Set(packageEntries.map((entry) => entry.version))
+    const versionSet = new Set(packageEntries.map(entry => entry.version))
     if (versionSet.size <= 1) {
       continue
     }
@@ -642,26 +584,21 @@ export function analyzeDuplicatePackages(
 
     const requestsByVersion = new Map<string, DependencyRequest[]>()
     for (const version of versions) {
-      const requests = [...(requestIndex.get(name)?.get(version) ?? [])].sort(
-        (left, right) => {
-          const lp = left.requestPath
-          const rp = right.requestPath
-          for (let i = 0; i < Math.min(lp.length, rp.length); i++) {
-            const cmp = compareStrings(lp[i] ?? "", rp[i] ?? "")
-            if (cmp !== 0) return cmp
-          }
-          if (lp.length !== rp.length) return lp.length - rp.length
-          return compareStrings(left.range, right.range)
-        },
-      )
+      const requests = [...(requestIndex.get(name)?.get(version) ?? [])].sort((left, right) => {
+        const lp = left.requestPath
+        const rp = right.requestPath
+        for (let i = 0; i < Math.min(lp.length, rp.length); i++) {
+          const cmp = compareStrings(lp[i] ?? "", rp[i] ?? "")
+          if (cmp !== 0) return cmp
+        }
+        if (lp.length !== rp.length) return lp.length - rp.length
+        return compareStrings(left.range, right.range)
+      })
 
       requestsByVersion.set(version, requests)
     }
 
-    const compatibilityByVersion = new Map<
-      string,
-      Map<string, "can" | "cannot" | "unknown">
-    >()
+    const compatibilityByVersion = new Map<string, Map<string, "can" | "cannot" | "unknown">>()
 
     const evaluateCompatibility = (
       fromVersion: string,
@@ -672,15 +609,14 @@ export function analyzeDuplicatePackages(
         return "unknown"
       }
 
-      const compatibilityChecks = requests.map((request) =>
+      const compatibilityChecks = requests.map(request =>
         evaluateRequestCompatibility(request, toVersion),
       )
 
-      if (compatibilityChecks.some((value) => value === false)) return "cannot"
+      if (compatibilityChecks.some(value => value === false)) return "cannot"
       // Every inbound request must be checkable before a version can be
       // rewritten; one unknown range keeps the whole version unchanged.
-      if (compatibilityChecks.some((value) => value === undefined))
-        return "unknown"
+      if (compatibilityChecks.some(value => value === undefined)) return "unknown"
       return "can"
     }
 
@@ -713,10 +649,9 @@ export function analyzeDuplicatePackages(
       const compatibleTargetVersion = versions
         .slice(0, versionIndex)
         .find(
-          (candidateVersion) =>
+          candidateVersion =>
             targetVersions.has(candidateVersion) &&
-            compatibilityByVersion.get(version)?.get(candidateVersion) ===
-              "can",
+            compatibilityByVersion.get(version)?.get(candidateVersion) === "can",
         )
 
       if (compatibleTargetVersion) {
@@ -730,17 +665,14 @@ export function analyzeDuplicatePackages(
       }
 
       const hasDeterministicChecksAgainstTargets = [...targetVersions].some(
-        (candidateVersion) =>
-          compatibilityByVersion.get(version)?.get(candidateVersion) !==
-          "unknown",
+        candidateVersion =>
+          compatibilityByVersion.get(version)?.get(candidateVersion) !== "unknown",
       )
 
       const hasIncomingFromLowerNeedingTarget = versions
         .slice(versionIndex + 1)
         .some((lowerVersion, lowerOffset) => {
-          if (
-            compatibilityByVersion.get(lowerVersion)?.get(version) !== "can"
-          ) {
+          if (compatibilityByVersion.get(lowerVersion)?.get(version) !== "can") {
             return false
           }
 
@@ -748,11 +680,9 @@ export function analyzeDuplicatePackages(
           const canLowerVersionDedupeToExistingTarget = versions
             .slice(0, lowerIndex)
             .some(
-              (candidateVersion) =>
+              candidateVersion =>
                 targetVersions.has(candidateVersion) &&
-                compatibilityByVersion
-                  .get(lowerVersion)
-                  ?.get(candidateVersion) === "can",
+                compatibilityByVersion.get(lowerVersion)?.get(candidateVersion) === "can",
             )
 
           return !canLowerVersionDedupeToExistingTarget
@@ -806,10 +736,7 @@ export function analyzeDuplicatePackages(
 
     for (const duplicate of duplicates) {
       for (const versionInfo of duplicate.versions) {
-        if (
-          versionInfo.status !== "cannot-dedupe" &&
-          versionInfo.status !== "unknown"
-        ) {
+        if (versionInfo.status !== "cannot-dedupe" && versionInfo.status !== "unknown") {
           continue
         }
 
@@ -818,17 +745,12 @@ export function analyzeDuplicatePackages(
         }
 
         const becomesUnreachable = versionInfo.requests.every(
-          (request) =>
+          request =>
             requestWillBeRemovedByRequesterRewrite(
               request,
               versionInfo.version,
               orphanDetectionContext,
-            ) ||
-            requestHasOrphanRequester(
-              request,
-              orphanDetectionContext,
-              duplicateStatuses,
-            ),
+            ) || requestHasOrphanRequester(request, orphanDetectionContext, duplicateStatuses),
         )
 
         if (!becomesUnreachable) {
@@ -836,10 +758,7 @@ export function analyzeDuplicatePackages(
         }
 
         versionInfo.status = "orphan"
-        duplicateStatuses.set(
-          duplicateVersionKey(duplicate.name, versionInfo.version),
-          "orphan",
-        )
+        duplicateStatuses.set(duplicateVersionKey(duplicate.name, versionInfo.version), "orphan")
         orphanChanged = true
       }
     }

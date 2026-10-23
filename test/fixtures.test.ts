@@ -23,9 +23,7 @@ type RegistryFixture = {
 
 function makeFixtureFetch(fixtureDir: string) {
   const registryPath = path.join(fixtureDir, "registry.json")
-  const registry: RegistryFixture = JSON.parse(
-    readFileSync(registryPath, "utf8"),
-  )
+  const registry: RegistryFixture = JSON.parse(readFileSync(registryPath, "utf8"))
 
   return async (input: string | URL | Request) => {
     const url = typeof input === "string" ? input : input.toString()
@@ -63,13 +61,13 @@ function makeFixtureFetch(fixtureDir: string) {
 }
 
 const allFixtures = readdirSync(fixturesRoot, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => {
+  .filter(entry => entry.isDirectory())
+  .map(entry => {
     const dir = path.join(fixturesRoot, entry.name)
     const files = readdirSync(dir)
     return { name: entry.name, dir, files }
   })
-  .filter((f) => f.files.includes("bun.lock"))
+  .filter(f => f.files.includes("bun.lock"))
   .sort((a, b) => a.name.localeCompare(b.name))
 
 for (const { name, dir, files } of allFixtures) {
@@ -77,11 +75,9 @@ for (const { name, dir, files } of allFixtures) {
     files.includes("report.all.txt") &&
     files.includes("report.fixable.txt") &&
     files.includes("bun.dedupe.lock")
-  const hasUpdate =
-    files.includes("registry.json") && files.includes("report.update.txt")
+  const hasUpdate = files.includes("registry.json") && files.includes("report.update.txt")
   const hasUpdateFix = hasUpdate && files.includes("bun.update.lock")
-  const hasRepair =
-    files.includes("registry.json") && files.includes("report.repair.txt")
+  const hasRepair = files.includes("registry.json") && files.includes("report.repair.txt")
 
   test(`fixture: ${name}`, async () => {
     const lockText = readFileSync(path.join(dir, "bun.lock"), "utf8")
@@ -92,9 +88,7 @@ for (const { name, dir, files } of allFixtures) {
       expect(formatRepairReport(result, "bun.lock")).toBe(
         readFileSync(path.join(dir, "report.repair.txt"), "utf8").trimEnd(),
       )
-      expect(result.lockText).toBe(
-        readFileSync(path.join(dir, "bun.repair.lock"), "utf8"),
-      )
+      expect(result.lockText).toBe(readFileSync(path.join(dir, "bun.repair.lock"), "utf8"))
       const repeated = await repairLockText(result.lockText, { fetchFn })
       expect(repeated.changed).toBe(false)
       expect(repeated.lockText).toBe(result.lockText)
@@ -106,12 +100,7 @@ for (const { name, dir, files } of allFixtures) {
           "bun.lock",
           { includeUnfixable: true },
         ),
-      ).toBe(
-        readFileSync(
-          path.join(dir, "report.after-repair.txt"),
-          "utf8",
-        ).trimEnd(),
-      )
+      ).toBe(readFileSync(path.join(dir, "report.after-repair.txt"), "utf8").trimEnd())
     }
 
     if (hasDedupe) {
@@ -119,18 +108,9 @@ for (const { name, dir, files } of allFixtures) {
       const duplicates = analyzeDuplicatePackages(parsedLock)
       const dedupeResult = dedupeLockText(lockText)
 
-      const expectedAll = readFileSync(
-        path.join(dir, "report.all.txt"),
-        "utf8",
-      ).trimEnd()
-      const expectedFixable = readFileSync(
-        path.join(dir, "report.fixable.txt"),
-        "utf8",
-      ).trimEnd()
-      const expectedDedupe = readFileSync(
-        path.join(dir, "bun.dedupe.lock"),
-        "utf8",
-      )
+      const expectedAll = readFileSync(path.join(dir, "report.all.txt"), "utf8").trimEnd()
+      const expectedFixable = readFileSync(path.join(dir, "report.fixable.txt"), "utf8").trimEnd()
+      const expectedDedupe = readFileSync(path.join(dir, "bun.dedupe.lock"), "utf8")
 
       expect(
         formatReport(duplicates, dedupeResult, "bun.lock", {
@@ -150,23 +130,18 @@ for (const { name, dir, files } of allFixtures) {
       const parsedLock = parseBunLock(lockText)
       const dedupeResult = dedupeLockText(lockText)
       const fetchFn = makeFixtureFetch(dir)
-      const { duplicates, suggestedUpdates } =
-        await analyzeDuplicatePackagesWithUpdates(parsedLock, { fetchFn })
-      const { skippedUpdates } = await classifyUpdateSafety(
-        lockText,
-        suggestedUpdates,
+      const { duplicates, suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(
+        parsedLock,
         { fetchFn },
       )
+      const { skippedUpdates } = await classifyUpdateSafety(lockText, suggestedUpdates, { fetchFn })
 
       const fullOutput = formatReport(duplicates, dedupeResult, "bun.lock", {
         suggestedUpdates,
         skippedUpdates,
       })
 
-      const expected = readFileSync(
-        path.join(dir, "report.update.txt"),
-        "utf8",
-      ).trimEnd()
+      const expected = readFileSync(path.join(dir, "report.update.txt"), "utf8").trimEnd()
       expect(fullOutput).toBe(expected)
 
       if (hasUpdateFix) {
@@ -174,9 +149,7 @@ for (const { name, dir, files } of allFixtures) {
           fetchFn,
           suggestedUpdates,
         })
-        expect(updateResult.lockText).toBe(
-          readFileSync(path.join(dir, "bun.update.lock"), "utf8"),
-        )
+        expect(updateResult.lockText).toBe(readFileSync(path.join(dir, "bun.update.lock"), "utf8"))
       }
     }
   })

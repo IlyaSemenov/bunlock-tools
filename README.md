@@ -89,14 +89,14 @@ undici-types:
       - @types/node: 20.18.0 → 22.13.0
 ```
 
-| Icon | Meaning |
-| ---- | ------- |
-| ✅ | **Target** — the version that will be kept |
-| ⬆️ | **Can dedupe** — can be upgraded to the target; `--fix` will do this automatically |
-| ❌ | **Cannot dedupe** — requires a version incompatible with the target; needs manual resolution |
-| 🗑️ | **Orphan** — will become unreachable after the package listed in `removed after` is deduped, updated, or removed; no action needed |
-| ✋ | **Manual update** — an intermediate package update could remove this version, but `--update --fix` cannot safely apply it automatically |
-| ❓ | **Unknown** — uses a non-semver range (e.g. `catalog:`, `workspace:`) that cannot be checked automatically |
+| Icon | Meaning                                                                                                                                 |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| ✅   | **Target** — the version that will be kept                                                                                              |
+| ⬆️   | **Can dedupe** — can be upgraded to the target; `--fix` will do this automatically                                                      |
+| ❌   | **Cannot dedupe** — requires a version incompatible with the target; needs manual resolution                                            |
+| 🗑️   | **Orphan** — will become unreachable after the package listed in `removed after` is deduped, updated, or removed; no action needed      |
+| ✋   | **Manual update** — an intermediate package update could remove this version, but `--update --fix` cannot safely apply it automatically |
+| ❓   | **Unknown** — uses a non-semver range (e.g. `catalog:`, `workspace:`) that cannot be checked automatically                              |
 
 ## How deduplication works
 

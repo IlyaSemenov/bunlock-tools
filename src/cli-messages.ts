@@ -1,19 +1,13 @@
 import { parseBunLock } from "./bunlock"
 import type { DuplicatePackageInfo } from "./dedupe/analyze"
-import {
-  analyzeDuplicatePackages,
-  evaluateRequestCompatibility,
-} from "./dedupe/analyze"
+import { analyzeDuplicatePackages, evaluateRequestCompatibility } from "./dedupe/analyze"
 import { formatDuplicatesReport, updateIdentity } from "./dedupe/format"
 import {
   isSuggestedTarget,
   resolveSuggestedUnlock,
   type SuggestedUpdate,
 } from "./dedupe/update-analyze"
-import type {
-  SkippedUpdate,
-  UpdateAndDedupeLockResult,
-} from "./dedupe/update-fix"
+import type { SkippedUpdate, UpdateAndDedupeLockResult } from "./dedupe/update-fix"
 
 function plural(count: number, one: string, many: string): string {
   return count === 1 ? `${count} ${one}` : `${count} ${many}`
@@ -21,10 +15,7 @@ function plural(count: number, one: string, many: string): string {
 
 // --- Report (body + summary combined) ---
 
-export function formatReportOutput(
-  reportBody: string,
-  summary: string,
-): string {
+export function formatReportOutput(reportBody: string, summary: string): string {
   return `${reportBody}\n\n${summary}`
 }
 
@@ -81,18 +72,15 @@ export function buildReportSummary(
   const cleanupEntries = dedupeResult.prunedEntries ?? 0
   const skippedUpdateIds = new Set((skippedUpdates ?? []).map(updateIdentity))
   const appliedUpdates = (suggestedUpdates ?? []).filter(
-    (update) => !skippedUpdateIds.has(updateIdentity(update)),
+    update => !skippedUpdateIds.has(updateIdentity(update)),
   )
-  const intermediatePackages = new Set(appliedUpdates.map((u) => u.packageName))
-    .size
-  const manualUpdatePackages = new Set(
-    (skippedUpdates ?? []).map((u) => u.packageName),
-  ).size
+  const intermediatePackages = new Set(appliedUpdates.map(u => u.packageName)).size
+  const manualUpdatePackages = new Set((skippedUpdates ?? []).map(u => u.packageName)).size
   const manualUpdateDedupePackages = new Set(
-    (skippedUpdates ?? []).flatMap((u) => u.deduplicates.map((d) => d.name)),
+    (skippedUpdates ?? []).flatMap(u => u.deduplicates.map(d => d.name)),
   ).size
-  const unknownPackages = duplicateGroups.filter((group) => {
-    const statuses = new Set(group.versions.map((version) => version.status))
+  const unknownPackages = duplicateGroups.filter(group => {
+    const statuses = new Set(group.versions.map(version => version.status))
     return (
       statuses.has("unknown") &&
       !statuses.has("can-dedupe") &&
@@ -116,10 +104,7 @@ export function buildReportSummary(
   }
 }
 
-export function formatReportSummary(
-  summary: ReportSummary,
-  lockPath: string,
-): string {
+export function formatReportSummary(summary: ReportSummary, lockPath: string): string {
   const cleanupEntries = summary.cleanupEntries ?? 0
   if (summary.totalDuplicatePackages === 0 && cleanupEntries === 0) {
     return `All clean — no duplicate packages in ${lockPath}.`
@@ -135,9 +120,7 @@ export function formatReportSummary(
   }
 
   if (summary.readyPackages > 0) {
-    lines.push(
-      `${plural(summary.readyPackages, "package", "packages")} can be deduped.`,
-    )
+    lines.push(`${plural(summary.readyPackages, "package", "packages")} can be deduped.`)
   }
 
   if (summary.intermediatePackages > 0) {
@@ -153,9 +136,7 @@ export function formatReportSummary(
   }
 
   if (summary.cannotDedupePackages > 0) {
-    lines.push(
-      `${plural(summary.cannotDedupePackages, "package", "packages")} cannot be deduped.`,
-    )
+    lines.push(`${plural(summary.cannotDedupePackages, "package", "packages")} cannot be deduped.`)
   }
 
   if ((summary.unknownPackages ?? 0) > 0) {
@@ -189,9 +170,7 @@ export function formatReportSummary(
       lines.push("Run with --fix to remove unreachable entries.")
     }
     if (canUpdate) {
-      lines.push(
-        "Run with --update --fix to update intermediate packages and apply dedupes.",
-      )
+      lines.push("Run with --update --fix to update intermediate packages and apply dedupes.")
     }
   }
 
@@ -210,27 +189,20 @@ export function countCannotDedupePackages(
   duplicates: DuplicatePackageInfo[],
   suggestedUpdates: SuggestedUpdate[],
 ): number {
-  return duplicates.filter((group) => {
-    const hasFixable = group.versions.some(
-      (v) => v.status === "can-dedupe" || v.status === "orphan",
-    )
+  return duplicates.filter(group => {
+    const hasFixable = group.versions.some(v => v.status === "can-dedupe" || v.status === "orphan")
     if (hasFixable) return false
 
     const cannotDedupeVersions = group.versions.filter(
-      (v) =>
-        v.status === "cannot-dedupe" &&
-        !isSuggestedTarget(group.name, v.version, suggestedUpdates),
+      v =>
+        v.status === "cannot-dedupe" && !isSuggestedTarget(group.name, v.version, suggestedUpdates),
     )
-    const allCovered = cannotDedupeVersions.every((v) => {
-      const unlock = resolveSuggestedUnlock(
-        group.name,
-        v.version,
-        suggestedUpdates,
-      )
+    const allCovered = cannotDedupeVersions.every(v => {
+      const unlock = resolveSuggestedUnlock(group.name, v.version, suggestedUpdates)
       if (!unlock) return false
 
       return v.requests.every(
-        (request) =>
+        request =>
           unlock.requesterLockKeys.has(request.requesterNodeId) ||
           evaluateRequestCompatibility(request, unlock.targetVersion) === true,
       )
@@ -293,10 +265,7 @@ export function buildFixSummary({
   }
 }
 
-export function formatFixSummary(
-  summary: FixSummary,
-  lockPath: string,
-): string {
+export function formatFixSummary(summary: FixSummary, lockPath: string): string {
   if (summary.kind === "clean") {
     return `All clean — no duplicate packages in ${lockPath}.`
   }
@@ -324,9 +293,7 @@ export function formatFixSummary(
 // --- Update fix report (--update --fix) ---
 
 function countUniqueSkippedDedupePackages(updates: SuggestedUpdate[]): number {
-  return new Set(
-    updates.flatMap((update) => update.deduplicates.map((d) => d.name)),
-  ).size
+  return new Set(updates.flatMap(update => update.deduplicates.map(d => d.name))).size
 }
 
 function buildSkippedUpdateSummary(updates: SkippedUpdate[]): {
@@ -336,8 +303,7 @@ function buildSkippedUpdateSummary(updates: SkippedUpdate[]): {
 } {
   return {
     skippedUpdateCount: updates.length,
-    skippedPackageCount: new Set(updates.map((update) => update.packageName))
-      .size,
+    skippedPackageCount: new Set(updates.map(update => update.packageName)).size,
     skippedDedupePackageCount: countUniqueSkippedDedupePackages(updates),
   }
 }
@@ -409,10 +375,7 @@ export type UpdateFixSummary =
       skippedDedupePackageCount?: number
     }
 
-export function formatUpdateFixSummary(
-  summary: UpdateFixSummary,
-  lockPath: string,
-): string {
+export function formatUpdateFixSummary(summary: UpdateFixSummary, lockPath: string): string {
   const skippedText =
     summary.skippedUpdateCount && summary.skippedUpdateCount > 0
       ? ` ${plural(summary.skippedDedupePackageCount ?? 0, "more package", "more packages")} could be deduped by manually updating ${plural(summary.skippedPackageCount ?? 0, "intermediate dependency", "intermediate dependencies")}.`
@@ -423,11 +386,7 @@ export function formatUpdateFixSummary(
     return skippedText ? `${base}\n${skippedText.trim()}` : base
   }
 
-  if (
-    summary.updatedEntries === 0 &&
-    summary.dedupedPackages === 0 &&
-    summary.prunedEntries > 0
-  ) {
+  if (summary.updatedEntries === 0 && summary.dedupedPackages === 0 && summary.prunedEntries > 0) {
     const base = `Removed ${plural(summary.prunedEntries, "unreachable entry", "unreachable entries")} from ${lockPath}.`
     return skippedText ? `${base}\n${skippedText.trim()}` : base
   }

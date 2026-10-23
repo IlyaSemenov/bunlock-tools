@@ -72,10 +72,7 @@ type RegistryOptions = {
   cacheDir?: string
   refresh?: boolean
   registryCacheDir?: string
-  fetchFn?: (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ) => Promise<Response>
+  fetchFn?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
   readDirFn?: (path: string) => string[]
   readFileFn?: (path: string) => string
   retryDelayFn?: (delayMs: number) => Promise<void>
@@ -84,18 +81,14 @@ type RegistryOptions = {
 }
 
 function wait(delayMs: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, delayMs))
+  return new Promise(resolve => setTimeout(resolve, delayMs))
 }
 
 function encodePackageNameForRegistryPath(packageName: string): string {
   if (packageName.startsWith("@")) {
     const slashIndex = packageName.indexOf("/")
     if (slashIndex !== -1) {
-      return (
-        packageName.slice(0, slashIndex) +
-        "%2F" +
-        packageName.slice(slashIndex + 1)
-      )
+      return packageName.slice(0, slashIndex) + "%2F" + packageName.slice(slashIndex + 1)
     }
   }
   return packageName
@@ -108,9 +101,7 @@ function defaultCacheDir(): string {
 function isPackument(value: unknown): value is Packument {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const { versions } = value as Partial<Packument>
-  return Boolean(
-    versions && typeof versions === "object" && !Array.isArray(versions),
-  )
+  return Boolean(versions && typeof versions === "object" && !Array.isArray(versions))
 }
 
 function parseCacheVersionDir(dirName: string): string | null {
@@ -175,10 +166,7 @@ function readCacheEntries(
   }
 
   try {
-    const { basePath, entryPrefix } = packageCacheDirectBasePath(
-      packageName,
-      cacheDir,
-    )
+    const { basePath, entryPrefix } = packageCacheDirectBasePath(packageName, cacheDir)
     const directPrefix = `${entryPrefix}@`
     for (const entry of readDirFn(basePath)) {
       if (!entry.startsWith(directPrefix)) continue
@@ -217,10 +205,7 @@ async function fetchPackument(
 
   const promise = (async (): Promise<Packument | null> => {
     if (options.offline) {
-      const {
-        readDirFn = readdirSync,
-        readFileFn = (p) => readFileSync(p, "utf8"),
-      } = options
+      const { readDirFn = readdirSync, readFileFn = p => readFileSync(p, "utf8") } = options
       const cacheDir = options.cacheDir ?? defaultCacheDir()
       const versions: Record<string, PackageMetadata> = {}
       for (const entry of readCacheEntries(packageName, cacheDir, readDirFn)) {
@@ -245,8 +230,7 @@ async function fetchPackument(
     // the user's system cache. Tests that exercise persistence opt in with an
     // explicit registryCacheDir.
     const registryCacheDir =
-      options.registryCacheDir ??
-      (options.fetchFn ? undefined : defaultRegistryCacheDir())
+      options.registryCacheDir ?? (options.fetchFn ? undefined : defaultRegistryCacheDir())
     const diskCache = registryCacheDir
       ? await openRegistryCache({
           cacheDir: registryCacheDir,
@@ -269,9 +253,7 @@ async function fetchPackument(
       packument: Packument | null,
       response: Response,
     ): Promise<Packument | null> =>
-      diskCache
-        ? diskCache.store(packument, response)
-        : Promise.resolve(packument)
+      diskCache ? diskCache.store(packument, response) : Promise.resolve(packument)
 
     const fetchOnce = (): Promise<Packument | null> =>
       fetchImpl(`${REGISTRY_URL}/${encodedName}`, {
@@ -282,7 +264,7 @@ async function fetchPackument(
             cause: error,
           })
         })
-        .then((response) => {
+        .then(response => {
           if (response.status === 304 && diskCache?.entry?.data) {
             return diskCache.revalidate(response)
           }
@@ -302,18 +284,11 @@ async function fetchPackument(
           return response
             .json()
             .catch((error: unknown) => {
-              throw new RegistryError(
-                packageName,
-                "malformed registry response",
-                { cause: error },
-              )
+              throw new RegistryError(packageName, "malformed registry response", { cause: error })
             })
-            .then((packument) => {
+            .then(packument => {
               if (!isPackument(packument)) {
-                throw new RegistryError(
-                  packageName,
-                  "malformed registry response",
-                )
+                throw new RegistryError(packageName, "malformed registry response")
               }
               return persistResponse(packument, response)
             })
@@ -347,7 +322,7 @@ export async function fetchCompatibleVersions(
 
   const satisfiesAllRanges = (version: string): boolean => {
     if (!semver.valid(version)) return false
-    return ranges.every((range) => {
+    return ranges.every(range => {
       const valid = semver.validRange(range)
       if (!valid) return false
       return semver.satisfies(version, valid)

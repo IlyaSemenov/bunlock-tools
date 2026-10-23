@@ -6,15 +6,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function renderInlineValue(value: unknown): string {
   if (Array.isArray(value)) {
-    return `[${value.map((item) => renderInlineValue(item)).join(", ")}]`
+    return `[${value.map(item => renderInlineValue(item)).join(", ")}]`
   }
 
   if (isRecord(value)) {
     const entries = Object.entries(value)
       .filter(([, item]) => item !== undefined)
-      .map(
-        ([key, item]) => `${JSON.stringify(key)}: ${renderInlineValue(item)}`,
-      )
+      .map(([key, item]) => `${JSON.stringify(key)}: ${renderInlineValue(item)}`)
 
     if (entries.length === 0) {
       return "{}"
@@ -41,9 +39,7 @@ function renderPackagesPropertyLines(
   )
 
   for (const [index, [lockKey, packageEntry]] of packageEntries.entries()) {
-    lines.push(
-      `${entryIndent}${JSON.stringify(lockKey)}: ${renderInlineValue(packageEntry)},`,
-    )
+    lines.push(`${entryIndent}${JSON.stringify(lockKey)}: ${renderInlineValue(packageEntry)},`)
     if (index < packageEntries.length - 1) {
       lines.push("")
     }
@@ -71,14 +67,7 @@ function renderObjectLines(
     const trailingComma = index < entries.length - 1
 
     if (allowPackagesFormatting && key === "packages" && isRecord(item)) {
-      lines.push(
-        ...renderPackagesPropertyLines(
-          key,
-          item,
-          indentLevel + 2,
-          trailingComma,
-        ),
-      )
+      lines.push(...renderPackagesPropertyLines(key, item, indentLevel + 2, trailingComma))
       continue
     }
 
@@ -90,17 +79,13 @@ function renderObjectLines(
         continue
       }
 
-      lines.push(
-        `${propertyIndent}${JSON.stringify(key)}: ${nestedLines[0]?.trimStart() ?? "{"}`,
-      )
+      lines.push(`${propertyIndent}${JSON.stringify(key)}: ${nestedLines[0]?.trimStart() ?? "{"}`)
       lines.push(...nestedLines.slice(1, -1))
       lines.push(`${nestedLines[nestedLines.length - 1]},`)
       continue
     }
 
-    lines.push(
-      `${propertyIndent}${JSON.stringify(key)}: ${renderInlineValue(item)},`,
-    )
+    lines.push(`${propertyIndent}${JSON.stringify(key)}: ${renderInlineValue(item)},`)
   }
 
   lines.push(`${indent}}`)

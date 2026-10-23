@@ -5,10 +5,7 @@
  * though it is a root package key. A real nested key has another path segment,
  * such as `@scope/requester/name`.
  */
-export function isNestedDependencyLockKey(
-  lockKey: string,
-  dependencyName: string,
-): boolean {
+export function isNestedDependencyLockKey(lockKey: string, dependencyName: string): boolean {
   if (!lockKey.endsWith(`/${dependencyName}`)) return false
 
   return dependencyName.startsWith("@") || !/^@[^/]+\/[^/]+$/.test(lockKey)
@@ -46,10 +43,7 @@ export function resolveDependencyLockKey(
       }
 
       const prefix = key.slice(0, -(dependencyName.length + 1))
-      if (
-        requesterLockKey === prefix ||
-        requesterLockKey.startsWith(`${prefix}/`)
-      ) {
+      if (requesterLockKey === prefix || requesterLockKey.startsWith(`${prefix}/`)) {
         if (prefix.length > bestPrefixLength) {
           bestCandidate = key
           bestPrefixLength = prefix.length

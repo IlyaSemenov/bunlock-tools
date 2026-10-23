@@ -21,10 +21,7 @@ type TestPackument = {
   versions: Record<string, unknown>
 }
 
-type FetchFn = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>
+type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 const temporaryCacheDirs: string[] = []
 const originalCacheEnv = process.env.BUNLOCK_DEDUPE_CACHE
@@ -87,9 +84,7 @@ describe("persistent registry cache", () => {
     await initial.store(initialPackument, new Response(null))
 
     if (freshness > 0) {
-      expect((await openCache(cacheDir, checkedAt + freshness - 1)).fresh).toBe(
-        true,
-      )
+      expect((await openCache(cacheDir, checkedAt + freshness - 1)).fresh).toBe(true)
     }
     expect((await openCache(cacheDir, checkedAt + freshness)).fresh).toBe(false)
   })
@@ -99,10 +94,7 @@ describe("persistent registry cache", () => {
     const registryCacheDir = makeCacheDir()
     let calls = 0
     const conditionalEtags: Array<string | null> = []
-    const fetchFn = (async (
-      _input: string | URL | Request,
-      init?: RequestInit,
-    ) => {
+    const fetchFn = (async (_input: string | URL | Request, init?: RequestInit) => {
       calls += 1
       if (calls === 1) {
         return new Response(JSON.stringify(initialPackument), {
@@ -151,10 +143,7 @@ describe("persistent registry cache", () => {
     const registryCacheDir = makeCacheDir()
     let calls = 0
     const conditionalEtags: Array<string | null> = []
-    const fetchFn = (async (
-      _input: string | URL | Request,
-      init?: RequestInit,
-    ) => {
+    const fetchFn = (async (_input: string | URL | Request, init?: RequestInit) => {
       calls += 1
       if (calls === 1) {
         return new Response(JSON.stringify(initialPackument), {
@@ -181,10 +170,7 @@ describe("persistent registry cache", () => {
       registryCacheDir,
       nowFn: () => 1_000_000 + 5 * 60 * 1000,
     })
-    const persisted = await openCache(
-      registryCacheDir,
-      1_000_000 + 5 * 60 * 1000 + 1,
-    )
+    const persisted = await openCache(registryCacheDir, 1_000_000 + 5 * 60 * 1000 + 1)
     const persistedHeaders = new Headers()
     persisted.addConditionalHeaders(persistedHeaders)
 
@@ -198,10 +184,7 @@ describe("persistent registry cache", () => {
   test("revalidates stale data with its ETag", async () => {
     const cacheDir = makeCacheDir()
     const initial = await openCache(cacheDir, 1_000_000)
-    await initial.store(
-      initialPackument,
-      new Response(null, { headers: { ETag: '"revision-1"' } }),
-    )
+    await initial.store(initialPackument, new Response(null, { headers: { ETag: '"revision-1"' } }))
 
     const stale = await openCache(cacheDir, 1_000_000 + 5 * 60 * 1000)
     const headers = new Headers()
@@ -219,24 +202,23 @@ describe("persistent registry cache", () => {
     ["1800", 60_000],
     ["30", 30_000],
     ["0", 0],
-  ] as const)("BUNLOCK_DEDUPE_CACHE=%s caps missing-package freshness at %i ms", async (value, freshness) => {
-    process.env.BUNLOCK_DEDUPE_CACHE = value
-    const cacheDir = makeCacheDir()
-    const initial = await openCache(cacheDir, 1_000_000, "missing")
-    await initial.store(null, new Response(null, { status: 404 }))
+  ] as const)(
+    "BUNLOCK_DEDUPE_CACHE=%s caps missing-package freshness at %i ms",
+    async (value, freshness) => {
+      process.env.BUNLOCK_DEDUPE_CACHE = value
+      const cacheDir = makeCacheDir()
+      const initial = await openCache(cacheDir, 1_000_000, "missing")
+      await initial.store(null, new Response(null, { status: 404 }))
 
-    if (freshness > 0) {
-      const fresh = await openCache(
-        cacheDir,
-        1_000_000 + freshness - 1,
-        "missing",
-      )
-      expect(fresh.fresh).toBe(true)
-      expect(fresh.entry?.data).toBeNull()
-    }
-    const stale = await openCache(cacheDir, 1_000_000 + freshness, "missing")
-    expect(stale.fresh).toBe(false)
-  })
+      if (freshness > 0) {
+        const fresh = await openCache(cacheDir, 1_000_000 + freshness - 1, "missing")
+        expect(fresh.fresh).toBe(true)
+        expect(fresh.entry?.data).toBeNull()
+      }
+      const stale = await openCache(cacheDir, 1_000_000 + freshness, "missing")
+      expect(stale.fresh).toBe(false)
+    },
+  )
 
   test("removes cache files unused for 30 days", async () => {
     const cacheDir = makeCacheDir()
@@ -265,12 +247,12 @@ describe("persistent registry cache", () => {
     const cacheDir = makeCacheDir()
     const initial = await openCache(cacheDir, 1_000_000)
     await initial.store(initialPackument, new Response(null))
-    const prefixDir = readdirSync(cacheDir, { withFileTypes: true }).find(
-      (entry) => entry.isDirectory(),
+    const prefixDir = readdirSync(cacheDir, { withFileTypes: true }).find(entry =>
+      entry.isDirectory(),
     )
     if (!prefixDir) throw new Error("cache prefix directory was not created")
-    const cacheFile = readdirSync(join(cacheDir, prefixDir.name)).find(
-      (entry) => entry.endsWith(".json"),
+    const cacheFile = readdirSync(join(cacheDir, prefixDir.name)).find(entry =>
+      entry.endsWith(".json"),
     )
     if (!cacheFile) throw new Error("cache entry was not created")
     writeFileSync(join(cacheDir, prefixDir.name, cacheFile), "{")

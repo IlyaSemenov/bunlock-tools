@@ -1,20 +1,12 @@
 export type { Progress, ProgressFn } from "../progress"
 export type { PackageMetadata, PackumentCache } from "../registry"
 export { RegistryError } from "../registry"
-export type {
-  DependencyRequest,
-  DuplicatePackageInfo,
-  DuplicateVersionInfo,
-} from "./analyze"
+export type { DependencyRequest, DuplicatePackageInfo, DuplicateVersionInfo } from "./analyze"
 export { analyzeDuplicatePackages } from "./analyze"
 export { formatDuplicatesReport } from "./format"
 export type { DedupeLockResult } from "./rewrite"
 export { dedupeLockText } from "./rewrite"
-export type {
-  SuggestedUpdate,
-  UpdateAnalysisOptions,
-  UpdateAnalysisResult,
-} from "./update-analyze"
+export type { SuggestedUpdate, UpdateAnalysisOptions, UpdateAnalysisResult } from "./update-analyze"
 export { analyzeDuplicatePackagesWithUpdates } from "./update-analyze"
 export type {
   SkippedUpdate,

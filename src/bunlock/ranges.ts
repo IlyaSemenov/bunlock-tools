@@ -1,10 +1,6 @@
 import semver from "semver"
 
-import {
-  type BunLockFile,
-  type BunPackageMeta,
-  isOptionalPeerDependency,
-} from "./parse"
+import { type BunLockFile, type BunPackageMeta, isOptionalPeerDependency } from "./parse"
 
 /** Return undefined when a range or version has no supported semver interpretation. */
 export function evaluateRangeCompatibility(
@@ -82,10 +78,7 @@ export function isResolvedDependencyReachable(
   lock: Pick<BunLockFile, "overrides">,
   requester: Pick<
     BunPackageMeta,
-    | "dependencies"
-    | "optionalDependencies"
-    | "peerDependencies"
-    | "optionalPeers"
+    "dependencies" | "optionalDependencies" | "peerDependencies" | "optionalPeers"
   >,
   dependencyName: string,
   resolvedVersion: string,

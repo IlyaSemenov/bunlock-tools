@@ -29,18 +29,21 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: "24"
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup mise
+        uses: jdx/mise-action@v4
         with:
-          bun-version: latest
+          version: 2026.10.17
 
       - name: Install deps
         run: bun install --frozen-lockfile
 
       - name: Build packages
         run: bun run build
+
+      - name: Typecheck packages
+        run: bun run types
 
       - name: Test packages
         run: bun run test

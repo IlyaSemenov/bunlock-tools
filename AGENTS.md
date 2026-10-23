@@ -105,4 +105,4 @@ Describe the user-visible change.
 - Run `bun run types` when public types, shared interfaces, or TypeScript configuration change.
 - Run `bun test` when behavior changes.
 - Run `bun run build` when package exports, declarations, or supported runtimes change.
-- Treat `bun run lint` and `bun run check` as mutating commands because they invoke Biome with auto-fixes.
+- Treat `bun run lint` and `bun run check` as mutating commands because they run oxlint and oxfmt with auto-fixes.

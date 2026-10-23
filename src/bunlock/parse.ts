@@ -81,15 +81,11 @@ export function isPackageEntry(value: unknown): value is BunPackageEntry {
   return Array.isArray(value) && typeof value[0] === "string"
 }
 
-export function isGitPackageEntry(
-  entry: BunPackageEntry,
-): entry is BunGitPackageEntry {
+export function isGitPackageEntry(entry: BunPackageEntry): entry is BunGitPackageEntry {
   return isObject(entry[1])
 }
 
-export function packageEntryMeta(
-  entry: BunPackageEntry,
-): BunPackageMeta | undefined {
+export function packageEntryMeta(entry: BunPackageEntry): BunPackageMeta | undefined {
   if (isGitPackageEntry(entry)) return entry[1]
 
   const maybeMeta = entry[2]
@@ -113,28 +109,16 @@ export function normalizeDependencyMap(value: unknown): DependencyMap {
 
 /** True when a peer is optional and is not also installed as a dependency. */
 export function isOptionalPeerDependency(
-  metadata: Pick<
-    BunPackageMeta,
-    "dependencies" | "optionalDependencies" | "optionalPeers"
-  >,
+  metadata: Pick<BunPackageMeta, "dependencies" | "optionalDependencies" | "optionalPeers">,
   dependencyName: string,
 ): boolean {
-  if (
-    !Array.isArray(metadata.optionalPeers) ||
-    !metadata.optionalPeers.includes(dependencyName)
-  ) {
+  if (!Array.isArray(metadata.optionalPeers) || !metadata.optionalPeers.includes(dependencyName)) {
     return false
   }
 
   return (
-    !Object.hasOwn(
-      normalizeDependencyMap(metadata.dependencies),
-      dependencyName,
-    ) &&
-    !Object.hasOwn(
-      normalizeDependencyMap(metadata.optionalDependencies),
-      dependencyName,
-    )
+    !Object.hasOwn(normalizeDependencyMap(metadata.dependencies), dependencyName) &&
+    !Object.hasOwn(normalizeDependencyMap(metadata.optionalDependencies), dependencyName)
   )
 }
 
@@ -142,9 +126,7 @@ export function isOptionalPeerDependency(
  * Splits Bun's resolved package spec (`name@version`) using the last `@`, so
  * scoped package names such as `@scope/name@1.0.0` are handled correctly.
  */
-export function parseResolvedSpec(
-  spec: string,
-): { name: string; version: string } | null {
+export function parseResolvedSpec(spec: string): { name: string; version: string } | null {
   const atIndex = spec.lastIndexOf("@")
   if (atIndex <= 0 || atIndex >= spec.length - 1) {
     return null
@@ -172,9 +154,7 @@ export function parseBunLock(lockText: string): BunLockFile {
     }
     for (const [name, value] of Object.entries(overrides)) {
       if (typeof value !== "string") {
-        throw new Error(
-          `bun.lock override for ${JSON.stringify(name)} must be a string`,
-        )
+        throw new Error(`bun.lock override for ${JSON.stringify(name)} must be a string`)
       }
     }
   }

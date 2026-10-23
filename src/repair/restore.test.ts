@@ -3,16 +3,12 @@ import { describe, expect, test } from "bun:test"
 import { parseBunLock } from "../bunlock"
 import type { PackageMetadata } from "../registry"
 import { RegistryError } from "../registry"
+
 import { repairLockText } from "./restore"
 
 const original = JSON.stringify({
   packages: {
-    pkg: [
-      "pkg@1.0.0",
-      "",
-      { peerDependencies: { vue: "3.5.21" } },
-      "sha512-pkg",
-    ],
+    pkg: ["pkg@1.0.0", "", { peerDependencies: { vue: "3.5.21" } }, "sha512-pkg"],
     vue: ["vue@3.5.21", "", {}, "sha512-vue"],
   },
 })
@@ -36,10 +32,7 @@ function fetchMetadata(metadata: unknown) {
 describe("repair source verification", () => {
   test.each([
     [null, "metadata-unavailable"],
-    [
-      { version: "2.0.0", dist: { integrity: "sha512-pkg" } },
-      "invalid-metadata",
-    ],
+    [{ version: "2.0.0", dist: { integrity: "sha512-pkg" } }, "invalid-metadata"],
     [
       {
         version: "1.0.0",
@@ -57,18 +50,18 @@ describe("repair source verification", () => {
       "invalid-metadata",
     ],
     [{ version: "1.0.0" }, "no-integrity"],
-    [
-      { version: "1.0.0", dist: { integrity: "sha512-other" } },
-      "integrity-mismatch",
-    ],
-  ] as const)("keeps the original text when metadata %j cannot be trusted", async (metadata, reason) => {
-    const result = await repairLockText(original, {
-      fetchFn: fetchMetadata(metadata),
-    })
-    expect(result.lockText).toBe(original)
-    expect(result.changed).toBe(false)
-    expect(result.skippedEntries).toEqual([{ lockKey: "pkg", reason }])
-  })
+    [{ version: "1.0.0", dist: { integrity: "sha512-other" } }, "integrity-mismatch"],
+  ] as const)(
+    "keeps the original text when metadata %j cannot be trusted",
+    async (metadata, reason) => {
+      const result = await repairLockText(original, {
+        fetchFn: fetchMetadata(metadata),
+      })
+      expect(result.lockText).toBe(original)
+      expect(result.changed).toBe(false)
+      expect(result.skippedEntries).toEqual([{ lockKey: "pkg", reason }])
+    },
+  )
 
   test("supports lockfiles with SHA-1 archive identity", async () => {
     const shasum = "a".repeat(40)
@@ -89,18 +82,9 @@ describe("repair source verification", () => {
     const lock = JSON.stringify({
       patchedDependencies: { "pkg@1.0.0": "patches/pkg.patch" },
       packages: {
-        pkg: [
-          "pkg@1.0.0",
-          "",
-          { peerDependencies: { vue: "3.5.21" } },
-          "sha512-pkg",
-        ],
+        pkg: ["pkg@1.0.0", "", { peerDependencies: { vue: "3.5.21" } }, "sha512-pkg"],
         local: ["local@workspace:packages/local"],
-        git: [
-          "git@github:owner/repo#abcdef",
-          { peerDependencies: { vue: "3.5.21" } },
-          "cache",
-        ],
+        git: ["git@github:owner/repo#abcdef", { peerDependencies: { vue: "3.5.21" } }, "cache"],
       },
     })
     let calls = 0
@@ -171,12 +155,7 @@ test("fetches each package once, restores every locked version, and preserves co
         { peerDependencies: { vue: "3.5.21" }, bundled: true },
         "sha512-old",
       ],
-      "other/pkg": [
-        "pkg@1.0.0",
-        "",
-        { peerDependencies: { vue: "3.5.21" } },
-        "sha512-old",
-      ],
+      "other/pkg": ["pkg@1.0.0", "", { peerDependencies: { vue: "3.5.21" } }, "sha512-old"],
       vue: ["vue@3.5.21", "", {}, "sha512-vue"],
     },
   })
@@ -194,14 +173,14 @@ test("fetches each package once, restores every locked version, and preserves co
     },
   }
   const result = await repairLockText(lock, {
-    fetchFn: async (input) => {
+    fetchFn: async input => {
       calls++
       if (String(input).endsWith("/vue")) return fetchMetadata(null)(input)
       return new Response(JSON.stringify({ versions }))
     },
   })
   expect(calls).toBe(2)
-  expect(result.repairedEntries.map((entry) => entry.lockKey)).toEqual([
+  expect(result.repairedEntries.map(entry => entry.lockKey)).toEqual([
     "pkg",
     "parent/pkg",
     "other/pkg",
