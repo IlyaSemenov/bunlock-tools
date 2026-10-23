@@ -1,4 +1,5 @@
-import { parseBunLock } from "./bunlock"
+import { parseBunLock } from "bunlock-lockfile"
+
 import type { DuplicatePackageInfo } from "./dedupe/analyze"
 import { analyzeDuplicatePackages, evaluateRequestCompatibility } from "./dedupe/analyze"
 import { formatDuplicatesReport, updateIdentity } from "./dedupe/format"

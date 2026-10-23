@@ -1,4 +1,4 @@
-export { parseBunLock } from "./bunlock"
+export { parseBunLock } from "bunlock-lockfile"
 export {
   analyzeDuplicatePackages,
   analyzeDuplicatePackagesWithUpdates,

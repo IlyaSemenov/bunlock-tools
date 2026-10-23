@@ -1,5 +1,3 @@
-import semver from "semver"
-
 import {
   type BunLockFile,
   type BunPackageMeta,
@@ -12,7 +10,9 @@ import {
   packageEntryMeta,
   parseResolvedSpec,
   resolveDependencyLockKey,
-} from "../bunlock"
+} from "bunlock-lockfile"
+import semver from "semver"
+
 import { compareStrings } from "../utils"
 
 export type ResolvedPackage = {

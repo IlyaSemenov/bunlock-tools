@@ -5,5 +5,6 @@ export default defineConfig({
   format: "esm",
   sourcemap: true,
   exports: true,
-  dts: true,
+  // Emit workspace declarations together so the bundled bunlock-lockfile types are available.
+  dts: { eager: true },
 })

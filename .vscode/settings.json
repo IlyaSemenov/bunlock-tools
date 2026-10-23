@@ -3,10 +3,10 @@
   "editor.formatOnSave": true,
   "editor.tabSize": 2,
   "files.readonlyInclude": {
-    "dist/**": true
+    "**/dist/**": true
   },
   "search.exclude": {
     "node_modules": true,
-    "dist": true
+    "**/dist": true
   }
 }

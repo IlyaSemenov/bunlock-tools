@@ -1,56 +1,27 @@
 {
-  "name": "bunlock-dedupe",
-  "version": "1.9.0",
-  "description": "Analyze and deduplicate bun.lock dependencies",
-  "license": "MIT",
-  "author": "Ilya Semenov",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/IlyaSemenov/bunlock-dedupe"
-  },
-  "bin": {
-    "bunlock-dedupe": "./dist/cli.mjs"
-  },
-  "files": [
-    "dist",
-    "README.md"
+  "name": "bunlock-workspace",
+  "private": true,
+  "workspaces": [
+    "packages/*"
   ],
   "type": "module",
-  "exports": {
-    ".": "./dist/index.mjs",
-    "./cli": "./dist/cli.mjs",
-    "./package.json": "./package.json"
-  },
   "scripts": {
-    "build": "tsdown",
-    "cli": "bun src/cli.ts",
-    "types": "tsgo",
+    "build": "bun run --workspaces --if-present build",
+    "types": "bun run --workspaces --if-present types",
+    "test": "bun run --workspaces --if-present test",
     "lint": "oxlint --fix && oxfmt",
     "lint:check": "oxlint && oxfmt --check",
     "check": "bun run types && bun run lint",
     "changeset": "changeset",
-    "prepublishOnly": "bun run build",
     "prepare": "lefthook install",
-    "test": "bun test"
-  },
-  "dependencies": {
-    "env-paths": "^4.0.0",
-    "json5": "^2.2.3",
-    "semver": "^7.7.4"
+    "version-packages": "changeset version && bun install --lockfile-only"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
     "@ilyasemenov/oxc-config": "^0.1.1",
-    "@tsconfig/bun": "^1.0.10",
-    "@types/bun": "^1.4.4",
-    "@types/node": "^24.10.13",
-    "@types/semver": "^7.7.1",
-    "@typescript/native-preview": "^7.0.0-dev.20260124.1",
     "lefthook": "^2.1.1",
     "oxfmt": "^0.74.0",
-    "oxlint": "^1.89.0",
-    "tsdown": "^0.20.3",
-    "typescript": "^5.9.3"
+    "oxlint": "^1.89.0"
   },
   "packageManager": "bun@1.4.4"
 }

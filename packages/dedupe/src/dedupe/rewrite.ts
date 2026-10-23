@@ -10,7 +10,7 @@ import {
   parseBunLock,
   parseResolvedSpec,
   renderBunLock,
-} from "../bunlock"
+} from "bunlock-lockfile"
 
 import { analyzeDuplicatePackages, type DuplicatePackageInfo } from "./analyze"
 

@@ -1,5 +1,3 @@
-import semver from "semver"
-
 import {
   type BunLockFile,
   type BunPackageEntry,
@@ -12,7 +10,9 @@ import {
   parseResolvedSpec,
   renderBunLock,
   resolveDependencyLockKey,
-} from "../bunlock"
+} from "bunlock-lockfile"
+import semver from "semver"
+
 import { createPackumentCache, fetchPackageMetadata, type PackageMetadata } from "../registry"
 
 import type { DedupeLockResult } from "./rewrite"

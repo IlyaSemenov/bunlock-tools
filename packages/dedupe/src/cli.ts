@@ -3,7 +3,8 @@
 import { writeFileSync } from "node:fs"
 import { parseArgs } from "node:util"
 
-import { parseBunLock } from "./bunlock"
+import { parseBunLock } from "bunlock-lockfile"
+
 import {
   buildFixSummary,
   formatFixSummary,

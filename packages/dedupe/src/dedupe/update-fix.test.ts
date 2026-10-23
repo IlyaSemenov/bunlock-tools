@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { parseBunLock } from "../bunlock"
+import { parseBunLock } from "bunlock-lockfile"
+
 import type { PackageMetadata } from "../registry"
 
 import { analyzeDuplicatePackages } from "./analyze"

@@ -2,7 +2,8 @@ import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 
-import { parseBunLock } from "../src/bunlock"
+import { parseBunLock } from "bunlock-lockfile"
+
 import { formatReport } from "../src/cli-messages"
 import {
   analyzeDuplicatePackages,

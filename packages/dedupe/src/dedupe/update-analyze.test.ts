@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import type { BunLockFile, BunPackageEntry } from "../bunlock"
+import type { BunLockFile, BunPackageEntry } from "bunlock-lockfile"
+
 import type { PackageMetadata } from "../registry"
 
 import { formatDuplicatesReport } from "./format"

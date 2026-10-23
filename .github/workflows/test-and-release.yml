@@ -52,16 +52,18 @@ jobs:
         if: ${{ github.ref == env.MAIN_REF }}
         run: |
           if bunx @changesets/cli status --output=release.json; then
-            echo "RELEASE=Version $(jq -r '.releases[0].newVersion' release.json)" >> "$GITHUB_ENV"
-            rm release.json
+            # Changesets also lists dependents with type "none" whose versions stay unchanged.
+            echo "CHANGED_PACKAGES=$(jq -r '.releases | map(select(.type != "none") | .name + "@" + .newVersion) | join(", ")' release.json)" >> "$GITHUB_ENV"
           fi
+          rm -f release.json
 
       - name: Create Release Pull Request or Publish to npm
         if: ${{ github.ref == env.MAIN_REF }}
         uses: changesets/action@v1
         with:
+          version: bun run version-packages
           publish: npx changeset publish
-          title: ${{ env.RELEASE }}
-          commit: ${{ env.RELEASE }}
+          title: "Release ${{ env.CHANGED_PACKAGES }}"
+          commit: "Release ${{ env.CHANGED_PACKAGES }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

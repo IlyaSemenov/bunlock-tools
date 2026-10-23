@@ -1,7 +1,5 @@
 import { isDeepStrictEqual } from "node:util"
 
-import semver from "semver"
-
 import {
   type BunPackageMeta,
   effectiveDependencyRange,
@@ -14,7 +12,9 @@ import {
   parseResolvedSpec,
   renderBunLock,
   resolveDependencyLockKey,
-} from "../bunlock"
+} from "bunlock-lockfile"
+import semver from "semver"
+
 import type { ProgressFn } from "../progress"
 import { createPackumentCache, fetchPackageMetadata, type PackageMetadata } from "../registry"
 import { compareStrings } from "../utils"

@@ -1,5 +1,3 @@
-import semver from "semver"
-
 import {
   type BunLockFile,
   dependencyOverrideRange,
@@ -10,7 +8,9 @@ import {
   packageEntryMeta,
   parseResolvedSpec,
   resolveDependencyLockKey,
-} from "../bunlock"
+} from "bunlock-lockfile"
+import semver from "semver"
+
 import type { ProgressFn } from "../progress"
 import { fetchCompatibleVersions, fetchPackageMetadata, type PackumentCache } from "../registry"
 

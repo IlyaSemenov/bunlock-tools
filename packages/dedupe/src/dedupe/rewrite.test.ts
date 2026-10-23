@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { type BunLockFile, parseBunLock } from "../bunlock"
+import { type BunLockFile, parseBunLock } from "bunlock-lockfile"
 
 import { analyzeDuplicatePackages, evaluateRequestCompatibility } from "./analyze"
 import { dedupeLockText } from "./rewrite"

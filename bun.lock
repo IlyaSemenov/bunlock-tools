@@ -3,25 +3,47 @@
   "configVersion": 1,
   "workspaces": {
     "": {
+      "name": "bunlock-workspace",
+      "devDependencies": {
+        "@changesets/cli": "^2.29.8",
+        "@ilyasemenov/oxc-config": "^0.1.1",
+        "lefthook": "^2.1.1",
+        "oxfmt": "^0.74.0",
+        "oxlint": "^1.89.0",
+      },
+    },
+    "packages/dedupe": {
       "name": "bunlock-dedupe",
+      "version": "1.9.0",
+      "bin": {
+        "bunlock-dedupe": "./dist/cli.mjs",
+      },
       "dependencies": {
         "env-paths": "^4.0.0",
         "json5": "^2.2.3",
         "semver": "^7.7.4",
       },
       "devDependencies": {
-        "@changesets/cli": "^2.29.8",
-        "@ilyasemenov/oxc-config": "^0.1.1",
         "@tsconfig/bun": "^1.0.10",
         "@types/bun": "^1.4.4",
         "@types/node": "^24.10.13",
         "@types/semver": "^7.7.1",
         "@typescript/native-preview": "^7.0.0-dev.20260124.1",
-        "lefthook": "^2.1.1",
-        "oxfmt": "^0.74.0",
-        "oxlint": "^1.89.0",
+        "bunlock-lockfile": "workspace:*",
         "tsdown": "^0.20.3",
         "typescript": "^5.9.3",
+      },
+    },
+    "packages/lockfile": {
+      "name": "bunlock-lockfile",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@tsconfig/bun": "^1.0.10",
+        "@types/bun": "^1.4.4",
+        "@types/semver": "^7.7.1",
+        "@typescript/native-preview": "^7.0.0-dev.20260124.1",
+        "json5": "^2.2.3",
+        "semver": "^7.7.4",
       },
     },
   },
@@ -319,6 +341,10 @@
     "braces": ["braces@3.0.3", "", { "dependencies": { "fill-range": "^7.1.1" } }, "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA=="],
 
     "bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
+
+    "bunlock-dedupe": ["bunlock-dedupe@workspace:packages/dedupe"],
+
+    "bunlock-lockfile": ["bunlock-lockfile@workspace:packages/lockfile"],
 
     "cac": ["cac@6.7.14", "", {}, "sha512-b6Ilus+c3RrdDk+JhLKUAQfzzgLEPy6wcXqS7f/xe1EETvsDP6GORG7SFuOs6cID5YkqchW/LXZbX5bc8j7ZcQ=="],
 
