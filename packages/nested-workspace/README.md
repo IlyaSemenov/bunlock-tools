@@ -9,10 +9,10 @@ This package carries those root fields over to the host and merges the nested lo
 
 ## Install
 
-The CLI runs before the host dependencies are installed, so run it with `bunx` and pin the version:
+The CLI runs before the host dependencies are installed, so run it with `bunx`:
 
 ```sh
-bunx bun-nested-workspace@0.1.0
+bunx bun-nested-workspace
 ```
 
 It requires Bun 1.2.19 or later, the first version that resolves `catalog:` dependencies from both catalog locations.
@@ -43,7 +43,7 @@ The config takes these fields:
 Run the CLI in the host root after switching the nested checkout to another commit:
 
 ```sh
-bunx bun-nested-workspace@0.1.0
+bunx bun-nested-workspace
 ```
 
 The sync:
@@ -61,7 +61,7 @@ In a Docker build, run the sync with `--lockfile-only` in a stage that contains 
 COPY package.json bun.lock ./
 COPY nested/package.json nested/bun.lock nested/
 COPY nested/packages/core/package.json nested/packages/core/
-RUN bunx bun-nested-workspace@0.1.0 --lockfile-only
+RUN bunx bun-nested-workspace --lockfile-only
 ```
 
 ### Root fields
@@ -99,7 +99,7 @@ Only `bun.lock` with `lockfileVersion` 1 or 2 is supported, because the lockfile
 ## Check
 
 ```sh
-bunx bun-nested-workspace@0.1.0 --check
+bunx bun-nested-workspace --check
 ```
 
 The check writes nothing, does not run `bun install`, and exits with code 1 when the host files lag behind the nested checkout.
