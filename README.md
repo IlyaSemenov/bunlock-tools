@@ -1,4 +1,4 @@
-# bunlock
+# bunlock-tools
 
 Tools for Bun `bun.lock` files and workspaces.
 

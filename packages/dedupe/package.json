@@ -6,7 +6,7 @@
   "author": "Ilya Semenov",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/IlyaSemenov/bunlock-dedupe.git",
+    "url": "git+https://github.com/IlyaSemenov/bunlock-tools.git",
     "directory": "packages/dedupe"
   },
   "bin": {

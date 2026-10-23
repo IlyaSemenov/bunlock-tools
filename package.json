@@ -1,5 +1,5 @@
 {
-  "name": "bunlock-workspace",
+  "name": "bunlock-tools-workspace",
   "private": true,
   "workspaces": {
     "packages": [

@@ -29,7 +29,7 @@ bunx bunlock-dedupe /path/to/bun.lock --fix
 
 After `--fix`, run `bun install` once to let Bun normalize canonical lockfile key placement.
 This extra rewrite is expected for now; see GitHub issue [Match Bun canonical key placement
-](https://github.com/IlyaSemenov/bunlock-dedupe/issues/10).
+](https://github.com/IlyaSemenov/bunlock-tools/issues/10).
 
 ## What each mode does
 

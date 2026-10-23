@@ -9,13 +9,13 @@
     "monorepo",
     "workspace"
   ],
-  "homepage": "https://github.com/IlyaSemenov/bunlock-dedupe/tree/main/packages/nested-workspace#readme",
-  "bugs": "https://github.com/IlyaSemenov/bunlock-dedupe/issues",
+  "homepage": "https://github.com/IlyaSemenov/bunlock-tools/tree/main/packages/nested-workspace#readme",
+  "bugs": "https://github.com/IlyaSemenov/bunlock-tools/issues",
   "license": "MIT",
   "author": "Ilya Semenov",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/IlyaSemenov/bunlock-dedupe.git",
+    "url": "git+https://github.com/IlyaSemenov/bunlock-tools.git",
     "directory": "packages/nested-workspace"
   },
   "bin": {

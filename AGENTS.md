@@ -1,4 +1,4 @@
-# bunlock Workspace Agent Guide
+# bunlock-tools Workspace Agent Guide
 
 ## Overview
 

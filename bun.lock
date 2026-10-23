@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "bunlock-workspace",
+      "name": "bunlock-tools-workspace",
       "devDependencies": {
         "@changesets/cli": "^2.31.1",
         "@ilyasemenov/oxc-config": "^0.1.1",
