@@ -7,13 +7,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "types": "tsgo"
+    "types": "bun check"
   },
   "devDependencies": {
-    "@tsconfig/bun": "^1.0.10",
-    "@types/bun": "^1.4.4",
-    "@types/semver": "^7.7.1",
-    "@typescript/native-preview": "^7.0.0-dev.20260124.1",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/semver": "catalog:",
     "json5": "^2.2.3",
     "semver": "^7.7.4"
   }

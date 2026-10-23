@@ -6,7 +6,7 @@
   "author": "Ilya Semenov",
   "repository": {
     "type": "git",
-    "url": "https://github.com/IlyaSemenov/bunlock-dedupe",
+    "url": "git+https://github.com/IlyaSemenov/bunlock-dedupe.git",
     "directory": "packages/dedupe"
   },
   "bin": {
@@ -25,7 +25,7 @@
   "scripts": {
     "build": "tsdown",
     "cli": "bun src/cli.ts",
-    "types": "tsgo",
+    "types": "bun check",
     "prepublishOnly": "bun run build",
     "test": "bun test"
   },
@@ -35,13 +35,13 @@
     "semver": "^7.7.4"
   },
   "devDependencies": {
-    "@tsconfig/bun": "^1.0.10",
-    "@types/bun": "^1.4.4",
+    "@arethetypeswrong/core": "catalog:",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
     "@types/node": "^24.10.13",
-    "@types/semver": "^7.7.1",
-    "@typescript/native-preview": "^7.0.0-dev.20260124.1",
+    "@types/semver": "catalog:",
     "bunlock-lockfile": "workspace:*",
-    "tsdown": "^0.20.3",
-    "typescript": "^5.9.3"
+    "publint": "catalog:",
+    "tsdown": "catalog:"
   }
 }

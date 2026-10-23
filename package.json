@@ -1,9 +1,19 @@
 {
   "name": "bunlock-workspace",
   "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
+  "workspaces": {
+    "packages": [
+      "packages/*"
+    ],
+    "catalog": {
+      "@arethetypeswrong/core": "^0.18.5",
+      "@tsconfig/bun": "^1.0.11",
+      "@types/bun": "^1.4.4",
+      "@types/semver": "^7.8.0",
+      "publint": "^0.3.25",
+      "tsdown": "^0.23.2"
+    }
+  },
   "type": "module",
   "scripts": {
     "build": "bun run --workspaces --if-present build",
@@ -17,9 +27,9 @@
     "version-packages": "changeset version && bun install --lockfile-only"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.8",
+    "@changesets/cli": "^2.31.1",
     "@ilyasemenov/oxc-config": "^0.1.1",
-    "lefthook": "^2.1.1",
+    "lefthook": "^2.2.2",
     "oxfmt": "^0.74.0",
     "oxlint": "^1.89.0"
   },

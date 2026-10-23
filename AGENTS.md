@@ -17,6 +17,13 @@ Do not catalog files or restate information evident from their names and locatio
 - Keep package `src/index.ts` files limited to explicit public exports.
 - Treat published package `package.json` exports and supported runtimes as public contracts.
 
+## Tooling
+
+- Build every published package with the same tsdown setup, generating declarations with Oxc.
+- Typecheck with `bun check`.
+- Declare development tools shared by several packages in the root `workspaces.catalog` and reference them as `catalog:`.
+- Keep `dependencies` of published packages as plain ranges: `changeset publish` publishes through npm, which does not rewrite `catalog:` or `workspace:` specifiers.
+
 ## Architecture
 
 - Implement lockfile parsing, rendering, range evaluation, and dependency lookup once in the private `bunlock-lockfile` package.
