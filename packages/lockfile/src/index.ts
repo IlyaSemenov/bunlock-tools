@@ -16,11 +16,8 @@ export {
   parseBunLock,
   parseResolvedSpec,
 } from "./parse"
-export {
-  dependencyOverrideRange,
-  effectiveDependencyRange,
-  evaluateRangeCompatibility,
-  isResolvedDependencyReachable,
-} from "./ranges"
+export { dependencyOverrideRange, effectiveDependencyRange } from "./overrides"
+export { evaluateRangeCompatibility, isResolvedDependencyReachable } from "./ranges"
 export { renderBunLock } from "./render"
+export type { LockKeys } from "./resolve"
 export { isNestedDependencyLockKey, resolveDependencyLockKey } from "./resolve"

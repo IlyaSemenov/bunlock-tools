@@ -1,0 +1,59 @@
+{
+  "name": "bun-nested-workspace",
+  "version": "0.0.0",
+  "description": "Embed a checkout of another Bun workspace repository into a Bun workspace and keep the root package.json and bun.lock in sync with it",
+  "keywords": [
+    "bun",
+    "catalog",
+    "lockfile",
+    "monorepo",
+    "workspace"
+  ],
+  "homepage": "https://github.com/IlyaSemenov/bunlock-dedupe/tree/main/packages/nested-workspace#readme",
+  "bugs": "https://github.com/IlyaSemenov/bunlock-dedupe/issues",
+  "license": "MIT",
+  "author": "Ilya Semenov",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IlyaSemenov/bunlock-dedupe.git",
+    "directory": "packages/nested-workspace"
+  },
+  "bin": {
+    "bun-nested-workspace": "./dist/cli.mjs"
+  },
+  "files": [
+    "README.md",
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsdown",
+    "types": "bun check && bun check -p tests",
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "json5": "^2.2.3"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/core": "catalog:",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "bunlock-lockfile": "workspace:*",
+    "publint": "catalog:",
+    "tsdown": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.2.19"
+  }
+}

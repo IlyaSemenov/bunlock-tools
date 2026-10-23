@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig",
+  "compilerOptions": {
+    "paths": {
+      "bun-nested-workspace": ["../src"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

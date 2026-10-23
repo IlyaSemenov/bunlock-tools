@@ -61,11 +61,15 @@ export type BunGitPackageEntry = [
 
 export type BunPackageEntry = BunRegistryPackageEntry | BunGitPackageEntry
 
-/** Parsed shape used by this tool; Bun may preserve additional top-level keys. */
+/** Parsed `bun.lock` sections that the tools read; Bun may preserve additional top-level keys. */
 export type BunLockFile = {
   lockfileVersion?: number
   configVersion?: number
   workspaces?: Record<string, BunLockWorkspace>
+  /** Default catalog of the root `package.json`. */
+  catalog?: DependencyMap
+  /** Named catalogs of the root `package.json`. */
+  catalogs?: Record<string, DependencyMap>
   /** Canonical map Bun writes for package.json overrides and resolutions. */
   overrides?: DependencyMap
   /** Package specs whose local patches may change their dependency declarations. */

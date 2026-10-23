@@ -26,11 +26,12 @@ Do not catalog files or restate information evident from their names and locatio
 
 ## Architecture
 
-- Implement lockfile parsing, rendering, range evaluation, and dependency lookup once in the private `bunlock-lockfile` package.
+- Implement lockfile parsing, rendering, and dependency lookup once in the private `bunlock-lockfile` package.
 - Use its shared resolver for normal dependency lookup.
 - Bundle `bunlock-lockfile` into each published package: list it in `devDependencies`, and keep published JavaScript and declarations free of imports from it.
 - Declare the runtime imports of `bunlock-lockfile` in the `dependencies` of each published package that bundles it.
 - Keep `bunlock-lockfile` independent of dedupe, repair, registry access, and CLI I/O.
+- Keep `bunlock-lockfile` free of Bun-specific APIs: `bunlock-dedupe` runs on Node.
 
 ## Documentation
 

@@ -1,3 +1,6 @@
+/** Lock keys to resolve against: a map keyed by lock key, or the `packages` section of `bun.lock`. */
+export type LockKeys = ReadonlyMap<string, unknown> | Readonly<Record<string, unknown>>
+
 /**
  * Tell nested dependency keys apart from root scoped package keys.
  *
@@ -17,52 +20,36 @@ export function isNestedDependencyLockKey(lockKey: string, dependencyName: strin
  * ancestor-provided nested entry, then root `dependency`.
  *
  * This is the canonical lock-key resolution shared by graph building, update
- * planning, and update safety checks; only the lock keys matter, so any map
- * keyed by lock key works.
+ * planning, and update safety checks; only the lock keys matter.
  *
- * @param requesterLockKey Package lock key that owns the dependency. Use
- * `undefined` for workspace/root resolution.
+ * @param requesterLockKey Package lock key or workspace name that owns the
+ * dependency. Use `undefined` for context-free resolution, which accepts a
+ * nested entry only when it is the unique candidate.
  * @param dependencyName Real npm package name being resolved.
  */
 export function resolveDependencyLockKey(
   requesterLockKey: string | undefined,
   dependencyName: string,
-  packagesByLockKey: ReadonlyMap<string, unknown>,
+  packagesByLockKey: LockKeys,
 ): string | undefined {
   if (requesterLockKey) {
-    const nestedKey = `${requesterLockKey}/${dependencyName}`
-    if (packagesByLockKey.has(nestedKey)) {
-      return nestedKey
-    }
-
-    let bestCandidate: string | undefined
-    let bestPrefixLength = -1
-    for (const key of packagesByLockKey.keys()) {
-      if (!isNestedDependencyLockKey(key, dependencyName)) {
-        continue
+    // Each lock key segment is a package name, so walking up the names visits the requester and then its ancestors.
+    const names = splitLockKey(requesterLockKey)
+    for (let depth = names.length; depth > 0; depth--) {
+      const nestedKey = `${names.slice(0, depth).join("/")}/${dependencyName}`
+      if (hasLockKey(packagesByLockKey, nestedKey)) {
+        return nestedKey
       }
-
-      const prefix = key.slice(0, -(dependencyName.length + 1))
-      if (requesterLockKey === prefix || requesterLockKey.startsWith(`${prefix}/`)) {
-        if (prefix.length > bestPrefixLength) {
-          bestCandidate = key
-          bestPrefixLength = prefix.length
-        }
-      }
-    }
-
-    if (bestCandidate) {
-      return bestCandidate
     }
   }
 
-  if (packagesByLockKey.has(dependencyName)) {
+  if (hasLockKey(packagesByLockKey, dependencyName)) {
     return dependencyName
   }
 
   if (!requesterLockKey) {
     let uniqueCandidate: string | undefined
-    for (const key of packagesByLockKey.keys()) {
+    for (const key of getLockKeys(packagesByLockKey)) {
       if (!isNestedDependencyLockKey(key, dependencyName)) {
         continue
       }
@@ -78,4 +65,21 @@ export function resolveDependencyLockKey(
   }
 
   return undefined
+}
+
+/** Split a lock key into the package names of its nesting chain, keeping scoped names whole. */
+function splitLockKey(lockKey: string): string[] {
+  return lockKey.match(/(?:@[^/]+\/)?[^/]+/g) ?? []
+}
+
+function hasLockKey(packagesByLockKey: LockKeys, lockKey: string): boolean {
+  return packagesByLockKey instanceof Map
+    ? packagesByLockKey.has(lockKey)
+    : Object.hasOwn(packagesByLockKey, lockKey)
+}
+
+function getLockKeys(packagesByLockKey: LockKeys): Iterable<string> {
+  return packagesByLockKey instanceof Map
+    ? packagesByLockKey.keys()
+    : Object.keys(packagesByLockKey)
 }
