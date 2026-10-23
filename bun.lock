@@ -14,7 +14,7 @@
     },
     "packages/dedupe": {
       "name": "bunlock-dedupe",
-      "version": "1.9.1",
+      "version": "1.9.2",
       "bin": {
         "bunlock-dedupe": "./dist/cli.mjs",
       },
@@ -47,7 +47,7 @@
     },
     "packages/nested-workspace": {
       "name": "bun-nested-workspace",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "bin": {
         "bun-nested-workspace": "./dist/cli.mjs",
       },

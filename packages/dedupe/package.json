@@ -1,6 +1,6 @@
 {
   "name": "bunlock-dedupe",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "Analyze and deduplicate bun.lock dependencies",
   "license": "MIT",
   "author": "Ilya Semenov",
