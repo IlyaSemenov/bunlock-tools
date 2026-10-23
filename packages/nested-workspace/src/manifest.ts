@@ -62,6 +62,7 @@ export interface PackageManifest {
   catalog?: Catalog
   catalogs?: Record<string, Catalog>
   overrides?: Record<string, string>
+  resolutions?: Record<string, string>
   patchedDependencies?: Record<string, string>
   trustedDependencies?: string[]
   [configField]?: NestedWorkspaceConfig
@@ -181,6 +182,13 @@ export interface OverriddenEntry {
 export interface ManifestSync {
   manifest: PackageManifest
   overridden: OverriddenEntry[]
+  /**
+   * Whether the sync added `trustedDependencies` to a host that did not define it.
+   *
+   * The explicit list replaces the default trusted list of Bun,
+   * so host dependencies that relied on the default list no longer run their lifecycle scripts.
+   */
+  addedTrustedDependencies: boolean
 }
 
 /**
@@ -188,7 +196,8 @@ export interface ManifestSync {
  *
  * A nested entry replaces a host entry with the same name, while the other host entries stay.
  * Entries synced earlier and dropped by the nested repository are removed.
- * Throws when the host and the nested repository patch the same package version.
+ * Throws when the host and the nested repository patch the same package version,
+ * and when either side defines `resolutions` while `overrides` are synced.
  */
 export function syncManifest(host: PackageManifest, nested: PackageManifest): ManifestSync {
   const config = readConfig(host)
@@ -238,6 +247,18 @@ export function syncManifest(host: PackageManifest, nested: PackageManifest): Ma
   manifest = setCatalogs(manifest, catalogs)
 
   if (config.fields.includes("overrides")) {
+    // Bun ignores `resolutions` whenever `overrides` is present, including an empty object,
+    // so synced overrides would disable the host resolutions, and nested resolutions would be lost.
+    for (const [source, resolutions] of [
+      ["The host package.json", host.resolutions],
+      [`${config.dir}/package.json`, nested.resolutions],
+    ] as const) {
+      if (resolutions && Object.keys(resolutions).length) {
+        throw new Error(
+          `${source} defines "resolutions", which Bun ignores once "overrides" is defined; move its entries to "overrides"`,
+        )
+      }
+    }
     const merged = mergeEntries("overrides", host.overrides, nested.overrides, synced.overrides)
     manifest.overrides = merged.entries
     synced.overrides = merged.synced
@@ -281,7 +302,12 @@ export function syncManifest(host: PackageManifest, nested: PackageManifest): Ma
     ? { ...rest, synced: syncedEntries }
     : rest
 
-  return { manifest, overridden }
+  return {
+    manifest,
+    overridden,
+    addedTrustedDependencies:
+      host.trustedDependencies === undefined && manifest.trustedDependencies !== undefined,
+  }
 }
 
 /**

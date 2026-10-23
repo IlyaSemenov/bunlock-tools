@@ -115,6 +115,27 @@ describe("sync", () => {
     expect(sync.output).toContain('catalog.nested-only: "^1.0.0" → "^2.0.0"')
   })
 
+  test("warns once when the sync adds trustedDependencies to the host", async () => {
+    await createFixture()
+
+    const sync1 = runCli("--lockfile-only")
+    const sync2 = runCli("--lockfile-only")
+
+    expect(sync1.exitCode, sync1.output).toBe(0)
+    expect(sync1.output).toContain("The sync added trustedDependencies to the host package.json.")
+    expect(sync2.exitCode, sync2.output).toBe(0)
+    expect(sync2.output).not.toContain("trustedDependencies")
+  })
+
+  test("warns about added trustedDependencies when bun install fails", async () => {
+    await createFixture()
+
+    const sync = runCli("--no-such-flag")
+
+    expect(sync.exitCode).toBe(1)
+    expect(sync.output).toContain("The sync added trustedDependencies to the host package.json.")
+  })
+
   test("fails before writing when host workspaces miss nested packages", async () => {
     await createFixture()
     const manifest = await readJson("package.json")

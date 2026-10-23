@@ -133,6 +133,21 @@ describe("syncManifest", () => {
     })
   })
 
+  test("rejects resolutions on either side while overrides are synced", () => {
+    const resolutions = { "is-number": "7.0.0" }
+
+    expect(() => syncManifest({ resolutions, ...config() }, {})).toThrow(
+      'The host package.json defines "resolutions"',
+    )
+    expect(() => syncManifest({ ...config() }, { resolutions })).toThrow(
+      'nested/package.json defines "resolutions"',
+    )
+    expect(
+      syncManifest({ resolutions, ...config({ fields: ["catalog"] }) }, { resolutions }).manifest
+        .resolutions,
+    ).toEqual(resolutions)
+  })
+
   test("syncs patched dependencies with paths inside the nested directory", () => {
     const host: PackageManifest = {
       patchedDependencies: {
@@ -187,6 +202,23 @@ describe("syncManifest", () => {
     expect(hostEmpty.manifest.trustedDependencies).toEqual([])
     expect(nestedEmpty.manifest.trustedDependencies).toEqual([])
     expect(syncedDropped.manifest.trustedDependencies).toEqual([])
+  })
+
+  test("reports adding trusted dependencies to a host without them", () => {
+    const nested: PackageManifest = { trustedDependencies: ["esbuild"] }
+
+    expect(syncManifest({ ...config() }, nested).addedTrustedDependencies).toBe(true)
+    expect(
+      syncManifest({ trustedDependencies: [], ...config() }, nested).addedTrustedDependencies,
+    ).toBe(false)
+    expect(
+      syncManifest({ ...config() }, { trustedDependencies: [] }).addedTrustedDependencies,
+    ).toBe(true)
+    expect(syncManifest({ ...config() }, {}).addedTrustedDependencies).toBe(false)
+
+    const unsynced = syncManifest({ ...config({ fields: ["overrides"] }) }, nested)
+    expect(unsynced.addedTrustedDependencies).toBe(false)
+    expect(unsynced.manifest).not.toHaveProperty("trustedDependencies")
   })
 
   test("syncs only the configured fields", () => {

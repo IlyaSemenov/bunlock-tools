@@ -12,12 +12,7 @@ import {
 } from "./check"
 import type { Lockfile } from "./lockfile"
 import { applyManifestToLockfile, mergeLockfiles, readLockfile, relocateLockfile } from "./lockfile"
-import type {
-  ManifestDifference,
-  OverriddenEntry,
-  PackageManifest,
-  ResolvedConfig,
-} from "./manifest"
+import type { ManifestDifference, ManifestSync, PackageManifest, ResolvedConfig } from "./manifest"
 import { diffManifests, readConfig, syncManifest } from "./manifest"
 
 /** Host and nested root files loaded from disk. */
@@ -126,11 +121,16 @@ export async function runBunInstall(root: string, args: readonly string[] = []):
 export interface SyncOptions {
   /** Arguments passed to `bun install`, such as `--lockfile-only`. */
   installArgs?: readonly string[]
+  /**
+   * Called with the result of `syncManifest` once the host `package.json` is written, before `bun install` runs.
+   *
+   * It reports the changes of `package.json` even when `bun install` fails and the sync throws.
+   */
+  onManifestSync?: (sync: ManifestSync) => void
 }
 
 /** Result of `syncNestedWorkspace`. */
 export interface SyncResult {
-  overridden: OverriddenEntry[]
   /** Own dependencies of host workspaces that the sync re-resolved; the sync failed when this is not empty. */
   ownDependencyChanges: DependencyMismatch[]
   /** Check of the synced files; the sync failed when it is not in sync. */
@@ -149,12 +149,14 @@ export async function syncNestedWorkspace(
 ): Promise<SyncResult> {
   const workspace = await loadNestedWorkspace(root)
   assertWorkspacesCovered(workspace)
-  const { manifest, overridden } = syncManifest(workspace.manifest, workspace.nestedManifest)
+  const manifestSync = syncManifest(workspace.manifest, workspace.nestedManifest)
+  const { manifest } = manifestSync
 
   const manifestText = formatJson(manifest, workspace.manifestText)
   if (manifestText !== workspace.manifestText) {
     await Bun.write(path.join(root, "package.json"), manifestText)
   }
+  options.onManifestSync?.(manifestSync)
 
   // bun install then adds new dependencies of host packages and removes unused entries.
   const merged = mergeLockfiles(
@@ -168,7 +170,6 @@ export async function syncNestedWorkspace(
 
   const synced = await loadNestedWorkspace(root)
   return {
-    overridden,
     // The committed host lockfile alone pins the own dependencies of the host.
     ownDependencyChanges: findOwnDependencyChanges(
       workspace.lock,

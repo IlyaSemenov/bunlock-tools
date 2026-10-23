@@ -3,7 +3,7 @@
 // Arguments other than --check are passed to bun install.
 
 import { getErrorMessage } from "./errors"
-import type { ManifestDifference, OverriddenEntry } from "./manifest"
+import type { ManifestDifference, ManifestSync, OverriddenEntry } from "./manifest"
 import type { CheckResult } from "./workspace"
 import {
   BunInstallError,
@@ -64,14 +64,10 @@ async function runCheck(root: string) {
 }
 
 async function runSync(root: string, installArgs: readonly string[]) {
-  const { overridden, ownDependencyChanges, check } = await syncNestedWorkspace(root, {
+  const { ownDependencyChanges, check } = await syncNestedWorkspace(root, {
     installArgs,
+    onManifestSync: printManifestSync,
   })
-  if (overridden.length) {
-    console.log(
-      ["Nested entries replaced host entries:", ...overridden.map(formatOverridden)].join("\n"),
-    )
-  }
 
   let exitCode = 0
   if (ownDependencyChanges.length) {
@@ -94,6 +90,23 @@ async function runSync(root: string, installArgs: readonly string[]) {
     exitCode = 1
   }
   return exitCode
+}
+
+function printManifestSync({ overridden, addedTrustedDependencies }: ManifestSync) {
+  if (overridden.length) {
+    console.log(
+      ["Nested entries replaced host entries:", ...overridden.map(formatOverridden)].join("\n"),
+    )
+  }
+  if (addedTrustedDependencies) {
+    console.warn(
+      [
+        "The sync added trustedDependencies to the host package.json.",
+        "Bun no longer applies its default trusted list, so host dependencies that relied on it no longer run their lifecycle scripts.",
+        "Add the ones the host needs to trustedDependencies.",
+      ].join("\n"),
+    )
+  }
 }
 
 /** Formats the differences of a failed check as indented lines grouped by kind. */

@@ -4,6 +4,7 @@ Embed a checkout of another Bun workspace repository into a subdirectory of your
 
 The nested repository stays a self-contained project with its own root `package.json` and `bun.lock`.
 Its packages, such as `nested/apps/*` and `nested/packages/*`, become workspaces of the host, while its root does not.
+The host installs none of the dependencies of the nested root `package.json` and cannot run its scripts.
 Bun reads catalogs, overrides, patches, and trusted dependencies from the workspace root only, and resolves the whole workspace from a single lockfile.
 This package carries those root fields over to the host and merges the nested lockfile into the host lockfile, so the nested packages build in the host with the same dependency versions as on their own.
 
@@ -55,22 +56,33 @@ The sync:
 
 Commit `package.json` and `bun.lock` after the sync.
 
-In a Docker build, run the sync with `--lockfile-only` in a stage that contains only the dependency files, before installing dependencies:
+In a Docker build, run the sync with `--lockfile-only` in a stage that contains only the dependency files, before installing dependencies.
+`bun install` also needs the patch files and the install configuration, such as `bunfig.toml` and `.npmrc`, so keep them, along with any files they reference.
+A separate stage can strip the build context down to these files, so the Dockerfile does not list every workspace package:
 
 ```dockerfile
-COPY package.json bun.lock ./
-COPY nested/package.json nested/bun.lock nested/
-COPY nested/packages/core/package.json nested/packages/core/
+FROM oven/bun:1 AS manifests
+WORKDIR /app
+COPY . .
+RUN find . -type f ! -name package.json ! -name bun.lock ! -name '*.patch' ! -name bunfig.toml ! -name .npmrc -delete
+
+FROM oven/bun:1 AS deps
+WORKDIR /app
+COPY --from=manifests /app ./
 RUN bunx bun-nested-workspace --lockfile-only
 ```
+
+Exclude `node_modules` and other large directories from the build context with `.dockerignore`.
 
 ### Root fields
 
 - `catalog` and `catalogs` each stay where the host defines them; a field the host lacks goes next to the other catalog field, or into `workspaces`.
   An array `workspaces` field becomes an object when a catalog needs it.
 - `overrides` and `trustedDependencies` are merged by package name.
+- `resolutions` on either side is an error while `overrides` are synced: Bun ignores `resolutions` once `overrides` is defined, so move its entries to `overrides`.
 - `trustedDependencies` stays in the host `package.json`, even empty, when either side defines it.
   An explicit list replaces the default trusted list of Bun, so when only one side defines the field, the packages of the other side lose the default list; list the ones whose lifecycle scripts they need.
+  The sync warns when it adds the field to the host.
 - `patchedDependencies` paths are rewritten through the nested directory, such as `nested/patches/exceljs@4.4.0.patch`.
 
 A nested entry replaces a host entry with the same name, while the other host entries stay.
@@ -145,5 +157,6 @@ if (!isInSync(check)) {
 ```
 
 `syncNestedWorkspace` writes the files and runs `bun install` before it checks the result, so a failed sync leaves the written files for inspection.
+Its `onManifestSync` option receives the replaced host entries and whether the sync added `trustedDependencies`, as soon as `package.json` is written and even when `bun install` then fails.
 
 Lower-level functions work on parsed files without touching the disk: `syncManifest`, `diffManifests`, `parseLockfile`, `relocateLockfile`, `applyManifestToLockfile`, `mergeLockfiles`, and the `find*` checks.
