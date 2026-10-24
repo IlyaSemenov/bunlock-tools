@@ -28,12 +28,12 @@ bunx bunlock-dedupe /path/to/bun.lock --fix
 ```
 
 After `--fix`, run `bun install` once to let Bun normalize canonical lockfile key placement.
-This extra rewrite is expected for now; see GitHub issue [Match Bun canonical key placement
-](https://github.com/IlyaSemenov/bunlock-tools/issues/10).
+This extra rewrite is expected for now; see GitHub issue [Match Bun canonical key placement](https://github.com/IlyaSemenov/bunlock-tools/issues/10).
 
 ## What each mode does
 
-**No flags** — scans the lockfile and shows packages where deduplication is possible. Marks the version that will be kept (`✅`), the versions that can be upgraded to it (`⬆️`), and orphan versions (`🗑️`) that will be removed when the parent is deduped.
+**No flags** — scans the lockfile and shows packages where deduplication is possible.
+Marks the version that will be kept (`✅`), the versions that can be upgraded to it (`⬆️`), and orphan versions (`🗑️`) that will be removed when the parent is deduped.
 
 **`--all`** — also shows packages that cannot be deduped (marked `❌`), for the full picture.
 
@@ -41,7 +41,8 @@ This extra rewrite is expected for now; see GitHub issue [Match Bun canonical ke
 
 **`--update`** — scans for intermediate dependencies that block deduplication and checks the npm registry for newer compatible versions that would unlock it.
 Use `--update --fix` to apply suggested lockfile updates and dedupe the unlocked entries.
-Use `--offline` to analyze only the local bun cache instead of the registry. `--offline --fix` is intentionally rejected because Bun's package cache does not include registry integrity metadata needed to safely write updated lockfile entries.
+Use `--offline` to analyze only the local bun cache instead of the registry.
+`--offline --fix` is intentionally rejected because Bun's package cache does not include registry integrity metadata needed to safely write updated lockfile entries.
 
 **`--repair`** — checks the locked package versions against the npm registry and shows dependency metadata that can be restored.
 Use `--repair --fix` to write the repairs.
@@ -49,7 +50,8 @@ Repair runs separately from deduplication and updates; it cannot be combined wit
 
 ## Output explained
 
-Each duplicate package is listed with its versions. Here is what every status means:
+Each duplicate package is listed with its versions.
+Here is what every status means:
 
 ```text
 typescript:
@@ -102,7 +104,8 @@ undici-types:
 
 Bun sometimes resolves the same package at multiple versions because different packages declare different version ranges — even ranges that could be satisfied by the same version.
 
-For example, if package A requires `^3.15.2` and package B requires `^3.17.0`, both ranges are compatible with `3.17.0`. `--fix` upgrades the `^3.15.2` entry to `3.17.0`, removing the duplicate.
+For example, if package A requires `^3.15.2` and package B requires `^3.17.0`, both ranges are compatible with `3.17.0`.
+`--fix` upgrades the `^3.15.2` entry to `3.17.0`, removing the duplicate.
 
 ## Range handling
 
