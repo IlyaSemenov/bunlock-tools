@@ -31,7 +31,7 @@ describe("parseLockfile", () => {
 })
 
 describe("relocateLockfile", () => {
-  test("moves workspaces and local resolutions into the nested directory", () => {
+  test("moves workspaces, including the root, and local resolutions into the nested directory", () => {
     const lock: Lockfile = {
       lockfileVersion: 1,
       workspaces: {
@@ -50,7 +50,7 @@ describe("relocateLockfile", () => {
 
     const relocated = relocateLockfile(lock, "nested")
 
-    expect(Object.keys(relocated.workspaces)).toEqual(["nested/packages/core"])
+    expect(Object.keys(relocated.workspaces)).toEqual(["nested", "nested/packages/core"])
     expect(Object.values(relocated.packages).map(([resolution]) => resolution)).toEqual([
       "@nested/core@workspace:nested/packages/core",
       "@nested/root@workspace:nested",
@@ -271,11 +271,38 @@ describe("mergeLockfiles", () => {
     expect(packages["@test/host/alias"]?.[0]).toBe("foo@1.0.0")
   })
 
+  test("takes the chains under the nested root from the nested lockfile only", () => {
+    const hostLock: Lockfile = {
+      lockfileVersion: 1,
+      workspaces: {
+        "": { name: "@test/root", devDependencies: { kit: "1.0.0" } },
+        nested: { name: "@nested/root", devDependencies: { kit: "^2.0.0" } },
+      },
+      packages: {
+        kit: ["kit@1.0.0", "", {}, "sha-kit-1"],
+        "@nested/root/kit": ["kit@2.0.0", "", {}, "sha-kit-2"],
+      },
+    }
+    const nestedLock: Lockfile = {
+      lockfileVersion: 1,
+      workspaces: { nested: { name: "@nested/root", devDependencies: { kit: "^2.0.0" } } },
+      packages: { kit: ["kit@2.1.0", "", {}, "sha-kit-2-1"] },
+    }
+
+    const merged = mergeLockfiles(hostLock, nestedLock, "nested")
+
+    expect(merged.packages).toEqual({
+      kit: ["kit@2.1.0", "", {}, "sha-kit-2-1"],
+      "@test/root/kit": ["kit@1.0.0", "", {}, "sha-kit-1"],
+    })
+  })
+
   test("takes nested workspaces from the nested lockfile only", () => {
     const hostLock: Lockfile = {
       lockfileVersion: 1,
       workspaces: {
         "": { name: "@test/root" },
+        nested: { name: "@nested/root", devDependencies: { kit: "^4.0.0" } },
         "nested/packages/removed": { name: "@nested/removed", dependencies: { kit: "^4.0.0" } },
         "nested/packages/core": { name: "@nested/core" },
       },
@@ -284,6 +311,7 @@ describe("mergeLockfiles", () => {
     const nestedLock: Lockfile = {
       lockfileVersion: 2,
       workspaces: {
+        nested: { name: "@nested/root" },
         "nested/packages/core": { name: "@nested/core", dependencies: { kit: "^3.0.0" } },
       },
       packages: { kit: ["kit@3.21.11", "", {}, "sha-kit-3"] },
@@ -294,6 +322,7 @@ describe("mergeLockfiles", () => {
     expect(merged.lockfileVersion).toBe(2)
     expect(merged.workspaces).toEqual({
       "": { name: "@test/root" },
+      nested: { name: "@nested/root" },
       "nested/packages/core": { name: "@nested/core", dependencies: { kit: "^3.0.0" } },
     })
     expect(merged.packages).toEqual({ kit: ["kit@3.21.11", "", {}, "sha-kit-3"] })

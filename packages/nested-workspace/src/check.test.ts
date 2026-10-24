@@ -12,6 +12,7 @@ import type { Lockfile } from "./lockfile"
 const nestedLock: Lockfile = {
   lockfileVersion: 1,
   workspaces: {
+    nested: { name: "@nested/root", devDependencies: { eslint: "^9.0.0" } },
     "nested/apps/web": {
       name: "@nested/web",
       dependencies: { "@nested/core": "workspace:*", sentry: "^1.0.0" },
@@ -32,10 +33,10 @@ describe("findUncoveredWorkspaces", () => {
   test("matches nested workspaces against host patterns", () => {
     expect(
       findUncoveredWorkspaces({ workspaces: ["./nested/apps/*", "apps/*"] }, nestedLock),
-    ).toEqual(["nested/packages/core"])
+    ).toEqual(["nested", "nested/packages/core"])
     expect(
       findUncoveredWorkspaces(
-        { workspaces: { packages: ["nested/*/*", "!nested/apps/web"] } },
+        { workspaces: { packages: ["nested", "nested/*/*", "!nested/apps/web"] } },
         nestedLock,
       ),
     ).toEqual(["nested/apps/web"])
@@ -48,6 +49,7 @@ describe("findWorkspaceMismatches", () => {
       lockfileVersion: 1,
       workspaces: {
         "": { name: "@host/root" },
+        nested: { name: "@nested/root", devDependencies: { eslint: "^9.0.0" } },
         "nested/apps/web": {
           dependencies: { sentry: "^1.0.0", "@nested/core": "workspace:*" },
           name: "@nested/web",
@@ -61,6 +63,31 @@ describe("findWorkspaceMismatches", () => {
       "nested/packages/core",
       "nested/packages/removed",
     ])
+  })
+
+  test("compares the nested root without the version and bin that Bun records only for a workspace package", () => {
+    const lock: Lockfile = {
+      ...nestedLock,
+      workspaces: {
+        ...nestedLock.workspaces,
+        nested: {
+          name: "@nested/root",
+          version: "1.0.0",
+          bin: { lint: "lint.js" },
+          devDependencies: { eslint: "^9.0.0" },
+        } as Lockfile["workspaces"][string],
+      },
+    }
+    const changed: Lockfile = {
+      ...lock,
+      workspaces: {
+        ...lock.workspaces,
+        nested: { name: "@nested/root", devDependencies: { eslint: "^9.1.0" } },
+      },
+    }
+
+    expect(findWorkspaceMismatches(lock, nestedLock, "nested")).toEqual([])
+    expect(findWorkspaceMismatches(changed, nestedLock, "nested")).toEqual(["nested"])
   })
 })
 
@@ -229,6 +256,27 @@ describe("findOwnDependencyChanges", () => {
       { workspace: "@host/api", dependency: "pino", expected: "pino@9.1.0", actual: "pino@9.2.0" },
       { workspace: "@host/api", dependency: "zod", expected: "zod@4.0.0", actual: "zod@4.0.5" },
     ])
+  })
+
+  test("lets a host dependency keep its version next to the nested root or take the nested one within the host range", () => {
+    const before: Lockfile = {
+      lockfileVersion: 1,
+      workspaces: {
+        "": { name: "@host/root", devDependencies: { eslint: "^8.0.0" } },
+        "apps/api": { name: "@host/api", devDependencies: { eslint: "^8.0.0 || ^9.0.0" } },
+        nested: { name: "@nested/root", devDependencies: { eslint: "^9.0.0" } },
+      },
+      packages: { eslint: ["eslint@8.57.0", "", {}, "sha-eslint-8"] },
+    }
+    const after: Lockfile = {
+      ...before,
+      packages: {
+        eslint: ["eslint@9.0.0", "", {}, "sha-eslint"],
+        "@host/root/eslint": ["eslint@8.57.0", "", {}, "sha-eslint-8"],
+      },
+    }
+
+    expect(findOwnDependencyChanges(before, after, nestedLock, "nested")).toEqual([])
   })
 
   test("reports a dependency that took a nested version outside the host range or disappeared", () => {

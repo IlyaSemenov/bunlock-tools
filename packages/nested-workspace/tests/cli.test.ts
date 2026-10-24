@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { cp, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { parseLockfile } from "bun-nested-workspace"
+
+import { startRegistry } from "./registry"
 
 const cliPath = path.join(import.meta.dir, "../src/cli.ts")
 
@@ -23,16 +25,33 @@ async function readJson(file: string) {
   return Bun.file(path.join(root, file)).json()
 }
 
-function run(cwd: string, command: string[]) {
-  const result = Bun.spawnSync(command, { cwd, stdout: "pipe", stderr: "pipe" })
-  return {
-    exitCode: result.exitCode,
-    output: `${result.stdout.toString()}${result.stderr.toString()}`,
-  }
+/** Runs a command asynchronously, so that a registry served by this process can respond. */
+async function run(cwd: string, command: string[], env: Record<string, string> = {}) {
+  const child = Bun.spawn(command, {
+    cwd,
+    env: { ...process.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ])
+  return { exitCode, output: `${stdout}${stderr}` }
 }
 
 function runCli(...args: string[]) {
   return run(root, [process.execPath, cliPath, ...args])
+}
+
+/** Runs `bun install --lockfile-only` in a nested package directory, where Bun treats the nested root as the workspace root. */
+function updateNestedLockfile(env?: Record<string, string>) {
+  return run(
+    path.join(root, "nested/packages/core"),
+    [process.execPath, "install", "--lockfile-only"],
+    env,
+  )
 }
 
 /**
@@ -45,7 +64,7 @@ async function createFixture() {
     "package.json": {
       name: "@host/root",
       private: true,
-      workspaces: ["apps/*", "nested/packages/*"],
+      workspaces: ["apps/*", "nested", "nested/packages/*"],
       catalog: { "@nested/core": "workspace:*", "host-only": "^1.0.0" },
       "bun-nested-workspace": { dir: "nested" },
     },
@@ -68,10 +87,8 @@ async function createFixture() {
       dependencies: { "@nested/core": "catalog:" },
     },
   })
-  expect(
-    run(path.join(root, "nested"), [process.execPath, "install", "--lockfile-only"]).exitCode,
-  ).toBe(0)
-  expect(run(root, [process.execPath, "install", "--lockfile-only"]).exitCode).toBe(0)
+  expect((await updateNestedLockfile()).exitCode).toBe(0)
+  expect((await run(root, [process.execPath, "install", "--lockfile-only"])).exitCode).toBe(0)
 }
 
 beforeEach(async () => {
@@ -86,7 +103,7 @@ describe("sync", () => {
   test("syncs root fields and the lockfile so that --check passes", async () => {
     await createFixture()
 
-    const sync = runCli("--lockfile-only")
+    const sync = await runCli("--lockfile-only")
 
     expect(sync.exitCode, sync.output).toBe(0)
     expect(await readJson("package.json")).toMatchObject({
@@ -100,8 +117,71 @@ describe("sync", () => {
     const lock = parseLockfile(await Bun.file(path.join(root, "bun.lock")).text())
     expect(lock.packages["@nested/util"]).toEqual(["@nested/util@workspace:nested/packages/util"])
 
-    const check = runCli("--check")
+    const check = await runCli("--check")
     expect(check.exitCode, check.output).toBe(0)
+  })
+
+  test("installs the dependencies of the nested root in the versions of the nested lockfile and runs its prepare script", async () => {
+    await using registry = await startRegistry(
+      ["1.0.0", "2.0.0", "2.1.0"].map(version => ({
+        name: "tool",
+        version,
+        bin: { tool: "cli.js" },
+        files: { "cli.js": `console.log("tool ${version}")` },
+      })),
+    )
+    const env = {
+      BUN_CONFIG_REGISTRY: registry.url,
+      BUN_INSTALL_CACHE_DIR: path.join(root, ".cache"),
+    }
+    const nestedManifest = {
+      name: "@nested/root",
+      private: true,
+      workspaces: ["packages/*"],
+      scripts: { prepare: "echo prepared > prepared.txt" },
+    }
+    await writeFiles({
+      "package.json": {
+        name: "@host/root",
+        private: true,
+        workspaces: ["nested", "nested/packages/*"],
+        devDependencies: { tool: "1.0.0" },
+        "bun-nested-workspace": { dir: "nested" },
+      },
+      "nested/package.json": nestedManifest,
+      "nested/packages/core/package.json": { name: "@nested/core" },
+    })
+    expect((await updateNestedLockfile(env)).exitCode).toBe(0)
+    expect((await run(root, [process.execPath, "install", "--lockfile-only"], env)).exitCode).toBe(
+      0,
+    )
+    await writeFiles({
+      "nested/package.json": { ...nestedManifest, devDependencies: { tool: "2.0.0" } },
+    })
+    expect((await updateNestedLockfile(env)).exitCode).toBe(0)
+
+    const sync = await run(root, [process.execPath, cliPath], env)
+
+    expect(sync.exitCode, sync.output).toBe(0)
+    const runTool = (dir: string) =>
+      run(root, [process.execPath, path.join(root, dir, "node_modules/.bin/tool")])
+    expect((await runTool("nested")).output.trim()).toBe("tool 2.0.0")
+    expect((await runTool(".")).output.trim()).toBe("tool 1.0.0")
+    expect(await Bun.file(path.join(root, "nested/prepared.txt")).exists()).toBe(true)
+    const check = await runCli("--check")
+    expect(check.exitCode, check.output).toBe(0)
+
+    // The host lockfile now records 2.0.0 under the nested root, which still satisfies the new range.
+    await writeFiles({
+      "nested/package.json": { ...nestedManifest, devDependencies: { tool: "^2.0.0" } },
+    })
+    await rm(path.join(root, "nested/bun.lock"))
+    expect((await updateNestedLockfile(env)).exitCode).toBe(0)
+
+    const resync = await run(root, [process.execPath, cliPath], env)
+
+    expect(resync.exitCode, resync.output).toBe(0)
+    expect((await runTool("nested")).output.trim()).toBe("tool 2.1.0")
   })
 
   test("lists host entries replaced by nested ones", async () => {
@@ -109,7 +189,7 @@ describe("sync", () => {
     const manifest = await readJson("package.json")
     await writeFiles({ "package.json": { ...manifest, catalog: { "nested-only": "^1.0.0" } } })
 
-    const sync = runCli("--lockfile-only")
+    const sync = await runCli("--lockfile-only")
 
     expect(sync.exitCode, sync.output).toBe(0)
     expect(sync.output).toContain('catalog.nested-only: "^1.0.0" → "^2.0.0"')
@@ -118,8 +198,8 @@ describe("sync", () => {
   test("warns once when the sync adds trustedDependencies to the host", async () => {
     await createFixture()
 
-    const sync1 = runCli("--lockfile-only")
-    const sync2 = runCli("--lockfile-only")
+    const sync1 = await runCli("--lockfile-only")
+    const sync2 = await runCli("--lockfile-only")
 
     expect(sync1.exitCode, sync1.output).toBe(0)
     expect(sync1.output).toContain("The sync added trustedDependencies to the host package.json.")
@@ -130,7 +210,7 @@ describe("sync", () => {
   test("warns about added trustedDependencies when bun install fails", async () => {
     await createFixture()
 
-    const sync = runCli("--no-such-flag")
+    const sync = await runCli("--no-such-flag")
 
     expect(sync.exitCode).toBe(1)
     expect(sync.output).toContain("The sync added trustedDependencies to the host package.json.")
@@ -141,11 +221,25 @@ describe("sync", () => {
     const manifest = await readJson("package.json")
     await writeFiles({ "package.json": { ...manifest, workspaces: ["apps/*"] } })
 
-    const sync = runCli("--lockfile-only")
+    const sync = await runCli("--lockfile-only")
 
     expect(sync.exitCode).toBe(1)
     expect(sync.output).toContain(
-      "does not include nested workspaces: nested/packages/core, nested/packages/util",
+      "does not include nested workspaces: nested, nested/packages/core, nested/packages/util",
+    )
+    expect(await readJson("package.json")).not.toHaveProperty("trustedDependencies")
+  })
+
+  test("fails before writing when the nested root has no name", async () => {
+    await createFixture()
+    const { name: _name, ...nestedManifest } = await readJson("nested/package.json")
+    await writeFiles({ "nested/package.json": nestedManifest })
+
+    const sync = await runCli("--lockfile-only")
+
+    expect(sync.exitCode).toBe(1)
+    expect(sync.output).toContain(
+      'nested/package.json needs a "name" field to be a workspace of the host',
     )
     expect(await readJson("package.json")).not.toHaveProperty("trustedDependencies")
   })
@@ -156,7 +250,7 @@ describe("sync", () => {
     await writeFiles({ "package.json": { ...manifest, overrides: { "left-pad": "$left-pad" } } })
     const lockText = await Bun.file(path.join(root, "bun.lock")).text()
 
-    const sync = runCli("--lockfile-only")
+    const sync = await runCli("--lockfile-only")
 
     expect(sync.exitCode).toBe(1)
     expect(sync.output).toContain(
@@ -170,7 +264,7 @@ describe("sync", () => {
 describe("--check", () => {
   test("fails when the nested checkout is ahead of the host", async () => {
     await createFixture()
-    expect(runCli("--lockfile-only").exitCode).toBe(0)
+    expect((await runCli("--lockfile-only")).exitCode).toBe(0)
     const nestedManifest = await readJson("nested/package.json")
     await writeFiles({
       "nested/package.json": {
@@ -185,11 +279,9 @@ describe("--check", () => {
         dependencies: { "@nested/util": "workspace:*" },
       },
     })
-    expect(
-      run(path.join(root, "nested"), [process.execPath, "install", "--lockfile-only"]).exitCode,
-    ).toBe(0)
+    expect((await updateNestedLockfile()).exitCode).toBe(0)
 
-    const check = runCli("--check")
+    const check = await runCli("--check")
 
     expect(check.exitCode).toBe(1)
     expect(check.output).toContain('catalog.nested-only: "^2.0.0" → "^2.1.0"')
@@ -201,7 +293,7 @@ describe("--check", () => {
     const manifestText = await Bun.file(path.join(root, "package.json")).text()
     const lockText = await Bun.file(path.join(root, "bun.lock")).text()
 
-    expect(runCli("--check").exitCode).toBe(1)
+    expect((await runCli("--check")).exitCode).toBe(1)
     expect(await Bun.file(path.join(root, "package.json")).text()).toBe(manifestText)
     expect(await Bun.file(path.join(root, "bun.lock")).text()).toBe(lockText)
   })
@@ -214,7 +306,7 @@ describe("--check", () => {
       (await Bun.file(lockPath).text()).replace(/"lockfileVersion": \d+/, '"lockfileVersion": 99'),
     )
 
-    const check = runCli("--check")
+    const check = await runCli("--check")
 
     expect(check.exitCode).toBe(1)
     expect(check.output).toContain("has lockfileVersion 99, supported versions: 1, 2")
@@ -223,7 +315,7 @@ describe("--check", () => {
   test("reports configuration errors as a message", async () => {
     await writeFiles({ "package.json": { name: "@host/root" } })
 
-    const check = runCli("--check")
+    const check = await runCli("--check")
 
     expect(check.exitCode).toBe(1)
     expect(check.output.trim()).toBe(
@@ -232,9 +324,39 @@ describe("--check", () => {
   })
 
   test("rejects other options", async () => {
-    const check = runCli("--check", "--frozen-lockfile")
+    const check = await runCli("--check", "--frozen-lockfile")
 
     expect(check.exitCode).toBe(1)
     expect(check.output).toContain("--check takes no other options, got --frozen-lockfile")
+  })
+})
+
+describe("bun install --lockfile-only in a nested package directory", () => {
+  test("writes the nested lockfile as in a separate clone and leaves the host lockfile", async () => {
+    await createFixture()
+    await writeFiles({
+      "nested/packages/core/package.json": {
+        name: "@nested/core",
+        dependencies: { "@nested/util": "workspace:*" },
+      },
+    })
+    const clone = await mkdtemp(path.join(tmpdir(), "bun-nested-workspace-clone-"))
+    try {
+      await cp(path.join(root, "nested"), clone, { recursive: true })
+      const lockText = await Bun.file(path.join(root, "bun.lock")).text()
+
+      expect((await updateNestedLockfile()).exitCode).toBe(0)
+      expect((await run(clone, [process.execPath, "install", "--lockfile-only"])).exitCode).toBe(0)
+
+      expect(await Bun.file(path.join(root, "nested/bun.lock")).text()).toBe(
+        await Bun.file(path.join(clone, "bun.lock")).text(),
+      )
+      expect(await Bun.file(path.join(root, "nested/bun.lock")).text()).toContain(
+        '"@nested/util": "workspace:*"',
+      )
+      expect(await Bun.file(path.join(root, "bun.lock")).text()).toBe(lockText)
+    } finally {
+      await rm(clone, { recursive: true, force: true })
+    }
   })
 })

@@ -58,15 +58,16 @@ export async function readLockfile(file: string): Promise<Lockfile> {
 /**
  * Returns the nested lockfile with workspace and local paths relative to the host root.
  *
- * The nested root workspace is dropped, because it is not a workspace of the host.
+ * The nested root workspace moves to the nested directory, where it is a workspace of the host.
  */
 export function relocateLockfile(lock: Lockfile, dir: string): Lockfile {
   return {
     ...lock,
     workspaces: Object.fromEntries(
-      Object.entries(lock.workspaces)
-        .filter(([workspacePath]) => workspacePath)
-        .map(([workspacePath, workspace]) => [path.posix.join(dir, workspacePath), workspace]),
+      Object.entries(lock.workspaces).map(([workspacePath, workspace]) => [
+        path.posix.join(dir, workspacePath),
+        workspace,
+      ]),
     ),
     packages: Object.fromEntries(
       Object.entries(lock.packages).map(([key, [resolution, ...rest]]) => [
@@ -143,8 +144,13 @@ export function applyManifestToLockfile(lock: Lockfile, manifest: PackageManifes
  */
 export function mergeLockfiles(lock: Lockfile, nestedLock: Lockfile, dir: string): Lockfile {
   // Nested chains under packages that the nested lockfile resolves are taken from the nested lockfile only.
+  // The nested workspaces count among them: the nested lockfile has no package entry for its root.
+  const nestedNames = new Set([
+    ...Object.keys(nestedLock.packages),
+    ...Object.values(nestedLock.workspaces).flatMap(workspace => workspace.name ?? []),
+  ])
   const hostPackages = Object.entries(lock.packages).filter(
-    ([key]) => !(splitPackageKey(key)[0]! in nestedLock.packages),
+    ([key]) => !nestedNames.has(splitPackageKey(key)[0]!),
   )
   const packages = { ...Object.fromEntries(hostPackages), ...nestedLock.packages }
   // Workspaces inside the nested directory come from the nested lockfile only, including removed ones.

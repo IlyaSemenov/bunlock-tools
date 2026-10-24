@@ -75,7 +75,7 @@ async function runSync(root: string, installArgs: readonly string[]) {
       [
         "The sync changed own dependencies of host packages.",
         "Either the host bun.lock did not pin them: restore bun.lock, run bun install, commit bun.lock, and sync again.",
-        "Or the nested root resolves them outside the host range: align the host range with the nested version.",
+        "Or the nested lockfile resolves them outside the host range: align the host range with the nested version.",
         ...ownDependencyChanges.map(({ workspace, dependency, expected, actual }) =>
           formatChange(`${workspace} > ${dependency}`, expected, actual),
         ),

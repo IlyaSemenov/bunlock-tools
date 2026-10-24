@@ -66,12 +66,20 @@ export function findWorkspaceMismatches(
     ...Object.keys(lock.workspaces).filter(workspacePath => isNestedPath(workspacePath, dir)),
   ])
 
+  // Bun records the version and bin of a workspace package but not of the root, so the nested root entry lacks them.
+  const comparable = (workspacePath: string, workspace: object | undefined) =>
+    workspacePath === dir && workspace
+      ? Object.fromEntries(
+          Object.entries(workspace).filter(([key]) => key !== "version" && key !== "bin"),
+        )
+      : workspace
+
   return [...paths]
     .sort()
     .filter(
       workspacePath =>
-        toCanonicalJson(lock.workspaces[workspacePath]) !==
-        toCanonicalJson(nestedLock.workspaces[workspacePath]),
+        toCanonicalJson(comparable(workspacePath, lock.workspaces[workspacePath])) !==
+        toCanonicalJson(comparable(workspacePath, nestedLock.workspaces[workspacePath])),
     )
 }
 

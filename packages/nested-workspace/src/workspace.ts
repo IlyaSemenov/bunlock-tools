@@ -67,11 +67,17 @@ export function isInSync(result: CheckResult): boolean {
 }
 
 /**
- * Throws when the host `workspaces` patterns miss nested workspaces.
+ * Throws when the host `workspaces` patterns miss nested workspaces or the nested root has no name.
  *
  * Bun would drop such workspaces from the merged lockfile, so neither mode can sync or check them.
+ * Bun skips a workspace package without a name, or fails on it in versions before 1.4.
  */
 export function assertWorkspacesCovered(workspace: NestedWorkspace): void {
+  if (typeof workspace.nestedManifest.name !== "string" || !workspace.nestedManifest.name) {
+    throw new Error(
+      `${workspace.config.dir}/package.json needs a "name" field to be a workspace of the host`,
+    )
+  }
   const uncovered = findUncoveredWorkspaces(workspace.manifest, workspace.nestedLock)
   if (uncovered.length) {
     throw new Error(

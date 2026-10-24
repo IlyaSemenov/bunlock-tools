@@ -3,8 +3,7 @@
 Embed a checkout of another Bun workspace repository into a subdirectory of your Bun workspace, and keep the root `package.json` and `bun.lock` of the host in sync with it.
 
 The nested repository stays a self-contained project with its own root `package.json` and `bun.lock`.
-Its packages, such as `nested/apps/*` and `nested/packages/*`, become workspaces of the host, while its root does not.
-The host installs none of the dependencies of the nested root `package.json` and cannot run its scripts.
+Its root and its packages, such as `nested/apps/*` and `nested/packages/*`, become workspaces of the host.
 Bun reads catalogs, overrides, patches, and trusted dependencies from the workspace root only, and resolves the whole workspace from a single lockfile.
 This package carries those root fields over to the host and merges the nested lockfile into the host lockfile, so the nested packages build in the host with the same dependency versions as on their own.
 
@@ -20,24 +19,42 @@ It requires Bun 1.2.19 or later, the first version that resolves `catalog:` depe
 
 ## Setup
 
-Add the nested packages to the host workspaces and name the nested directory in the `bun-nested-workspace` field of the host `package.json`:
+Add the nested directory and its packages to the host workspaces and name the nested directory in the `bun-nested-workspace` field of the host `package.json`:
 
 ```json
 {
-  "workspaces": ["apps/*", "nested/apps/*", "nested/packages/*"],
+  "workspaces": ["apps/*", "nested", "nested/apps/*", "nested/packages/*"],
   "bun-nested-workspace": {
     "dir": "nested"
   }
 }
 ```
 
-Both modes fail when the host `workspaces` patterns miss a workspace package of the nested repository.
+Both modes fail when the host `workspaces` patterns miss the nested root or a nested workspace package, or when the nested root `package.json` has no `name`.
 
 The config takes these fields:
 
 - `dir`: the nested checkout directory, relative to the host root.
 - `fields`: the root fields to sync, a subset of `catalog`, `catalogs`, `overrides`, `patchedDependencies`, and `trustedDependencies`; all of them when omitted.
 - `synced`: the names of entries that came from the nested repository, maintained by the sync; commit it and do not edit it by hand.
+
+## Nested checkout
+
+`bun install` in the host installs the dependencies of the nested root `package.json` in the versions of the nested lockfile, so the scripts and Git hooks of the nested repository work in the checkout.
+It also runs the `prepare` script of the nested root.
+
+Change the dependencies of the nested repository by editing its `package.json` files.
+Then update the nested lockfile with `bun install --lockfile-only` in the directory of any nested workspace package, and run the sync in the host:
+
+```sh
+(cd nested/packages/core && bun install --lockfile-only)
+bunx bun-nested-workspace
+```
+
+Do not run other `bun install`, `bun add`, or `bun remove` commands in the nested directory or in its package directories:
+
+- In the nested root, Bun runs them for the host: it writes the host lockfile and leaves the nested one stale.
+- In a nested package directory, Bun installs a separate `node_modules` of the nested repository over the host install.
 
 ## Sync
 
@@ -57,6 +74,7 @@ The sync:
 Commit `package.json` and `bun.lock` after the sync.
 
 In a Docker build, run the sync with `--lockfile-only` in a stage that contains only the dependency files, before installing dependencies.
+The dependency install runs the `prepare` script of the nested root unless it gets `--ignore-scripts`.
 `bun install` also needs the patch files and the install configuration, such as `bunfig.toml` and `.npmrc`, so keep them, along with any files they reference.
 A separate stage can strip the build context down to these files, so the Dockerfile does not list every workspace package:
 
@@ -91,8 +109,6 @@ A host entry equal to the nested one stays the host's own, so it survives when t
 An entry that came from the nested repository and is no longer there is removed; for patches, these are the patches inside the nested directory.
 A package version patched by both the host and the nested repository is an error.
 
-Bun warns when a nested patch targets a package version that the host does not install, such as a patched tool used only by the nested root.
-
 ### Lockfile
 
 The nested lockfile entries replace the host entries, so the nested packages keep their versions.
@@ -102,7 +118,7 @@ Ranges are checked as `bun install` applies them: an override replaces the decla
 `bun install` then resolves new dependencies of host packages and drops unused entries.
 
 After the install, the sync compares the direct dependencies of host packages with the original host lockfile.
-A dependency may only change to the version that the nested lockfile resolves at its root, and only within the host range.
+A dependency may only change to the version that the nested lockfile hoists to its top level, and only within the host range.
 Any other change means either that the host lockfile did not pin the host dependencies, for example after an edit of a host `package.json` without `bun install`, or that the lockfile cannot record the host version next to the nested one.
 The latter happens to a host workspace without a name, because Bun records workspace-specific versions under the workspace name; name the workspace or align its range with the nested version.
 
@@ -115,7 +131,7 @@ bunx bun-nested-workspace --check
 ```
 
 The check writes nothing, does not run `bun install`, and exits with code 1 when the host files lag behind the nested checkout.
-It reads the root `package.json` and `bun.lock` of the host and of the nested checkout only, so it relies on the nested `bun.lock` being up to date with the nested packages; `bun install --frozen-lockfile` in the nested directory verifies that.
+It reads the root `package.json` and `bun.lock` of the host and of the nested checkout only, so it relies on the nested `bun.lock` being up to date with the nested packages; `bun install --frozen-lockfile` in the CI of the nested repository verifies that.
 Use it in a non-blocking CI job that signals when a sync commit is due.
 
 It reports:
