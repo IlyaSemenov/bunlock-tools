@@ -1,0 +1,25 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "example",
+      "dependencies": {
+        "@types/debug": "https://registry.npmjs.org/@types/debug/-/debug-4.1.12.tgz",
+        "@types/ms": "0.7.31",
+        "tool": "1.0.0",
+      },
+    },
+  },
+  "packages": {
+    "@types/debug": ["@types/debug@https://registry.npmjs.org/@types/debug/-/debug-4.1.12.tgz", { "dependencies": { "@types/ms": "*" } }, "sha-debug-tarball"],
+
+    "@types/ms": ["@types/ms@0.7.31", "", {}, "sha-ms-old"],
+
+    "tool": ["tool@1.0.0", "", { "dependencies": { "@types/debug": "^4.1.0" } }, "sha-tool"],
+
+    "@types/debug/@types/ms": ["@types/ms@0.7.34", "", {}, "sha-ms-new"],
+
+    "tool/@types/debug": ["@types/debug@4.1.12", "", { "dependencies": { "@types/ms": "*" } }, "sha-debug"],
+  },
+}

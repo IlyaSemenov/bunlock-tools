@@ -127,11 +127,14 @@ export function isOptionalPeerDependency(
 }
 
 /**
- * Splits Bun's resolved package spec (`name@version`) using the last `@`, so
- * scoped package names such as `@scope/name@1.0.0` are handled correctly.
+ * Splits Bun's resolved package spec (`name@version`) at the first `@` after
+ * the leading `@` of a scoped name, as Bun does.
+ *
+ * The version part may contain `@` itself, as in a git, tarball, or workspace
+ * source such as `pkg@git+ssh://git@host/repo.git#sha`.
  */
 export function parseResolvedSpec(spec: string): { name: string; version: string } | null {
-  const atIndex = spec.lastIndexOf("@")
+  const atIndex = spec.indexOf("@", 1)
   if (atIndex <= 0 || atIndex >= spec.length - 1) {
     return null
   }

@@ -256,7 +256,7 @@ function findSatisfyingEntry(
   for (const entry of sources.flatMap(packages => Object.values(packages))) {
     if (
       satisfies(entry, requirement) &&
-      (!best || Bun.semver.order(getVersion(entry), getVersion(best)) > 0)
+      (!best || Bun.semver.order(getVersion(entry)!, getVersion(best)!) > 0)
     ) {
       best = entry
     }
@@ -265,7 +265,7 @@ function findSatisfyingEntry(
 }
 
 function getVersion([resolution]: BunPackageEntry) {
-  return resolution.slice(resolution.lastIndexOf("@") + 1)
+  return parseResolvedSpec(resolution)?.version
 }
 
 /** Returns whether an entry resolves the required package to a version in its range. */

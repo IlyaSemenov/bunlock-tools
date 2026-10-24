@@ -415,6 +415,27 @@ describe("analyzeDuplicatePackagesWithUpdates", () => {
     expect(suggestedUpdates).toEqual([])
   })
 
+  test("does not look up registry updates for a requester outside the registry", async () => {
+    const lock = lockWithCannotDedupe()
+    lock.packages["app-blocking"] = [
+      "app-blocking@https://registry.npmjs.org/@scope/app-blocking/-/app-blocking-1.0.0.tgz",
+      { dependencies: { "shared-dep": "^1.0.0" } },
+      "sha",
+    ]
+    const requests: string[] = []
+    const registry = makeRegistry({}, {})
+
+    const { suggestedUpdates } = await analyzeDuplicatePackagesWithUpdates(lock, {
+      fetchFn: async input => {
+        requests.push(String(input))
+        return registry(input)
+      },
+    })
+
+    expect(requests).toEqual([])
+    expect(suggestedUpdates).toEqual([])
+  })
+
   test("reports analyze progress per processed requester", async () => {
     const registry = makeRegistry(
       { "app-blocking": ["1.0.0", "1.1.0"] },

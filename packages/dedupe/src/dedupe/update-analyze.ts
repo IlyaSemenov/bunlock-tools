@@ -359,14 +359,14 @@ function collectBlockingRequesters(
         const packageEntry = lock.packages?.[lockKey]
         if (!Array.isArray(packageEntry) || typeof packageEntry[0] !== "string") continue
 
-        const spec = packageEntry[0]
-        const atIdx = spec.lastIndexOf("@")
-        if (atIdx <= 0) continue
+        // Only a registry version can be replaced by a newer registry version.
+        const spec = parseResolvedSpec(packageEntry[0])
+        if (!spec || !semver.valid(spec.version)) continue
 
         requesterMap.set(lockKey, {
           lockKey,
-          packageName: spec.slice(0, atIdx),
-          fromVersion: spec.slice(atIdx + 1),
+          packageName: spec.name,
+          fromVersion: spec.version,
           inboundRanges: [],
           blockedDuplicateNames: [],
         })

@@ -1,0 +1,21 @@
+@types/debug:
+  ✅ 4.1.12
+    used by:
+      - example > tool: ^4.1.0
+  ❓ https://registry.npmjs.org/@types/debug/-/debug-4.1.12.tgz
+    used by:
+      - example: https://registry.npmjs.org/@types/debug/-/debug-4.1.12.tgz
+
+@types/ms:
+  ✅ 0.7.34
+    used by:
+      - example > @types/debug: *
+  ❌ 0.7.31
+    blocked by:
+      - example: 0.7.31
+    also used by:
+      - example > tool > @types/debug: *
+
+2 duplicate packages in bun.lock.
+1 package cannot be deduped.
+Compatibility could not be checked automatically for 1 package.
