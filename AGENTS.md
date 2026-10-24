@@ -81,6 +81,11 @@ Describe the user-visible change.
   - Prefer: "Report a duplicate as held back when deduping it would break other dependencies, instead of breaking them with `--fix`."
 - Do not edit package versions or `CHANGELOG.md` files by hand, and do not run `changeset version` or `changeset publish`; the release workflow consumes pending changesets.
 
+## Commits
+
+- Start the subject of a commit that belongs to one package with the package name, a colon, and a lowercase imperative summary, such as `bun-nested-workspace: take the nested root workspace name from its package.json`.
+- Write the subject of any other commit as a capitalized imperative sentence without a prefix, such as `Describe the commit subject style in AGENTS.md`.
+
 ## Checks
 
 - Run package checks from that package's directory or use root scripts to check every workspace package.
