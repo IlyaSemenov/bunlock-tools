@@ -36,6 +36,9 @@ Do not catalog files or restate information evident from their names and locatio
 ## Documentation
 
 - Write README and CLI text for users who do not know the implementation.
+- Describe what each tool does and how to read its output, not how it computes it.
+- In user documentation, explain an edge case when it helps users prepare or act, not when it only repeats what the CLI output or the existing text already says.
+- When a change makes an existing statement false, fix that statement rather than add an explanation next to it.
 - Add JSDoc to every exported declaration and to internal helpers whose contract, inputs, output, or failure behavior is not obvious.
 - Add inline comments beside every non-obvious invariant, algorithmic choice, safety constraint, and intentionally limited behavior.
 - Update nearby JSDoc and inline comments whenever the documented code changes, and remove comments that no longer apply.
@@ -73,6 +76,9 @@ Describe the user-visible change.
 
 - Write one or two concise sentences for users describing the observable change or new capability.
   Avoid implementation details and rationale.
+- For a fix, describe the problem users saw, not how the fix works:
+  - Avoid: "Hold back a dedupe rewrite that would leave a dependency of the rewritten package resolving to a version outside its range."
+  - Prefer: "Report a duplicate as held back when deduping it would break other dependencies, instead of breaking them with `--fix`."
 - Do not edit package versions or `CHANGELOG.md` files by hand, and do not run `changeset version` or `changeset publish`; the release workflow consumes pending changesets.
 
 ## Checks
