@@ -6,6 +6,8 @@ import {
   findTransitiveMismatches,
   findUncoveredWorkspaces,
   findWorkspaceMismatches,
+  getWorkspacePatterns,
+  matchesWorkspacePatterns,
 } from "./check"
 import type { Lockfile } from "./lockfile"
 
@@ -28,6 +30,40 @@ const nestedLock: Lockfile = {
     zod: ["zod@4.1.0", "", {}, "sha-zod"],
   },
 }
+
+describe("matchesWorkspacePatterns", () => {
+  const matches = (workspaces: string[], dir: string) =>
+    matchesWorkspacePatterns(getWorkspacePatterns({ workspaces }), dir)
+
+  test("includes an exact path regardless of exclusions", () => {
+    expect(matches(["./packages/core/", "!packages/*"], "packages/core")).toBe(true)
+    expect(matches(["packages/*", "!packages/*"], "packages/core")).toBe(false)
+  })
+
+  test("includes the directory of a pattern that ends with /**", () => {
+    expect(matches(["packages/core/**"], "packages/core")).toBe(true)
+  })
+
+  test("normalizes glob patterns", () => {
+    expect(matches(["packages/../packages/*"], "packages/core")).toBe(true)
+  })
+
+  test("ignores the root itself", () => {
+    expect(matches([".", "./", "**"], ".")).toBe(false)
+    expect(matches(["src/../**"], "src/..")).toBe(false)
+    expect(matches(["**"], "packages/core")).toBe(true)
+  })
+
+  test("excludes the directory of an exclusion that ends with /**", () => {
+    expect(matches(["packages/*", "!packages/core/**"], "packages/core")).toBe(false)
+    expect(matches(["packages/*", "!packages/core/**"], "packages/util")).toBe(true)
+  })
+
+  test("skips node_modules, .git, and CMakeFiles directories in glob patterns", () => {
+    expect(matches(["packages/**"], "packages/core/node_modules/dep")).toBe(false)
+    expect(matches(["packages/**"], "packages/core")).toBe(true)
+  })
+})
 
 describe("findUncoveredWorkspaces", () => {
   test("matches nested workspaces against host patterns", () => {

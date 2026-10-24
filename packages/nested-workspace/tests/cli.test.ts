@@ -280,6 +280,132 @@ describe("sync", () => {
     expect(sync.output).toContain("The sync added trustedDependencies to the host package.json.")
   })
 
+  describe("failure after writing", () => {
+    /** Returns the texts of the host `package.json` and `bun.lock`. */
+    async function readHostFiles() {
+      return Promise.all(
+        ["package.json", "bun.lock"].map(file => Bun.file(path.join(root, file)).text()),
+      )
+    }
+
+    test("restores the host files when bun install fails", async () => {
+      await createFixture()
+      const hostFiles = await readHostFiles()
+
+      const sync = await runCli("--no-such-flag")
+
+      expect(sync.exitCode).toBe(1)
+      expect(sync.output).toContain("Restored package.json and bun.lock")
+      expect(await readHostFiles()).toEqual(hostFiles)
+    })
+
+    test("restores a package.json that a failed lifecycle script changed", async () => {
+      await createFixture()
+      expect((await runCli("--lockfile-only")).exitCode).toBe(0)
+      const manifest = await readJson("package.json")
+      await writeFiles({
+        "package.json": {
+          ...manifest,
+          scripts: { postinstall: `echo '{}' > package.json && exit 1` },
+        },
+      })
+      const hostFiles = await readHostFiles()
+
+      const sync = await runCli()
+
+      expect(sync.exitCode).toBe(1)
+      expect(sync.output).toContain("Restored package.json and bun.lock")
+      expect(await readHostFiles()).toEqual(hostFiles)
+    })
+
+    test("restores the host files when the sync changes own dependencies of host packages", async () => {
+      await using registry = await startToolRegistry(["1.0.0", "2.0.0"])
+      const env = getRegistryEnv(registry)
+      await createFixture()
+      const webManifest = await readJson("apps/web/package.json")
+      await writeFiles({
+        "apps/web/package.json": { ...webManifest, dependencies: { tool: "^1.0.0" } },
+      })
+      expect(
+        (await run(root, [process.execPath, "install", "--lockfile-only"], env)).exitCode,
+      ).toBe(0)
+      // An edit without bun install, so that the host lockfile does not pin the dependency.
+      await writeFiles({
+        "apps/web/package.json": { ...webManifest, dependencies: { tool: "^2.0.0" } },
+      })
+      const hostFiles = await readHostFiles()
+
+      const sync = await run(root, [process.execPath, cliPath, "--lockfile-only"], env)
+
+      expect(sync.exitCode).toBe(1)
+      expect(sync.output).toContain("@host/web > tool: tool@1.0.0 → tool@2.0.0")
+      expect(sync.output).toContain("Restored package.json and bun.lock")
+      expect(await readHostFiles()).toEqual(hostFiles)
+    })
+
+    test("reports an outdated nested lockfile and restores the host files", async () => {
+      await createFixture()
+      await writeFiles({
+        "nested/packages/core/package.json": {
+          name: "@nested/core",
+          dependencies: { "@nested/util": "workspace:*" },
+        },
+      })
+      const hostFiles = await readHostFiles()
+
+      const sync = await runCli("--lockfile-only")
+
+      expect(sync.exitCode).toBe(1)
+      expect(sync.output).toContain(
+        "nested/bun.lock lags behind the package.json files of nested. Update it and sync again:\n  (cd nested/packages/core && bun install --lockfile-only)",
+      )
+      expect(sync.output).toContain("Restored package.json and bun.lock")
+      expect(await readHostFiles()).toEqual(hostFiles)
+    })
+
+    test("names a package directory that the nested workspaces patterns include", async () => {
+      await createFixture()
+      const nestedManifest = await readJson("nested/package.json")
+      await writeFiles({
+        "nested/package.json": {
+          ...nestedManifest,
+          workspaces: {
+            ...nestedManifest.workspaces,
+            packages: [".", "packages/*", "!packages/core"],
+          },
+        },
+        "nested/packages/util/package.json": { name: "@nested/util" },
+      })
+
+      const sync = await runCli("--lockfile-only")
+
+      expect(sync.exitCode).toBe(1)
+      expect(sync.output).toContain("(cd nested/packages/util && bun install --lockfile-only)")
+    })
+
+    test("does not blame the nested lockfile for a host workspace that the nested repository does not have", async () => {
+      await createFixture()
+      const nestedManifest = await readJson("nested/package.json")
+      await writeFiles({
+        "nested/package.json": {
+          ...nestedManifest,
+          workspaces: {
+            ...nestedManifest.workspaces,
+            packages: ["packages/core", "packages/util"],
+          },
+        },
+      })
+      expect((await updateNestedLockfile()).exitCode).toBe(0)
+      await writeFiles({ "nested/packages/example/package.json": { name: "@nested/example" } })
+
+      const sync = await runCli("--lockfile-only")
+
+      expect(sync.exitCode).toBe(1)
+      expect(sync.output).toContain("bun.lock workspaces:\n    nested/packages/example")
+      expect(sync.output).not.toContain("lags behind")
+    })
+  })
+
   test("fails before writing when host workspaces miss nested packages", async () => {
     await createFixture()
     const manifest = await readJson("package.json")

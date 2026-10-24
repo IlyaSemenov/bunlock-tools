@@ -51,6 +51,8 @@ Then update the nested lockfile with `bun install --lockfile-only` in the direct
 bunx bun-nested-workspace
 ```
 
+A nested repository without workspace packages updates its lockfile in a separate clone.
+
 Do not run other `bun install`, `bun add`, or `bun remove` commands in the nested directory or in its package directories:
 
 - In the nested root, Bun runs them for the host: it writes the host lockfile and leaves the nested one stale.
@@ -72,6 +74,7 @@ The sync:
 4. Fails if the install re-resolved own dependencies of host packages, or if the host does not resolve the nested packages as the nested lockfile does.
 
 Commit `package.json` and `bun.lock` after the sync.
+A failed sync restores `package.json` and `bun.lock` to their contents before the run, while `node_modules` stays as the install left it.
 
 In a Docker build, run the sync with `--lockfile-only` in a stage that contains only the dependency files, before installing dependencies.
 The dependency install runs the `prepare` script of the nested root unless it gets `--ignore-scripts`.
@@ -132,7 +135,8 @@ bunx bun-nested-workspace --check
 ```
 
 The check writes nothing, does not run `bun install`, and exits with code 1 when the host files lag behind the nested checkout.
-It reads the root `package.json` and `bun.lock` of the host and of the nested checkout only, so it relies on the nested `bun.lock` being up to date with the nested packages; `bun install --frozen-lockfile` in the CI of the nested repository verifies that.
+It reads the root `package.json` and `bun.lock` of the host and of the nested checkout only, so it relies on the nested `bun.lock` being up to date with the nested packages.
+Verify that in the CI of the nested repository with `bun install --lockfile-only` followed by `git diff --exit-code bun.lock`: `bun install --frozen-lockfile` misses some changes, such as a narrowed range that the locked version still satisfies.
 Use it in a non-blocking CI job that signals when a sync commit is due.
 
 It reports:
@@ -149,7 +153,7 @@ Limitations:
 
 - Peer dependencies are not walked.
 - Edges that the nested lockfile itself resolves outside their range are skipped, because the sync repairs them in the host.
-- The check does not verify that the host lockfile matches the host packages; `bun install --frozen-lockfile` does.
+- The check does not verify that the host lockfile matches the host packages; `bun install --lockfile-only` followed by `git diff --exit-code bun.lock` does.
 - The check does not predict whether a sync would re-resolve own dependencies of host packages; only the sync detects it after `bun install`.
 
 ## API
@@ -173,7 +177,8 @@ if (!isInSync(check)) {
 }
 ```
 
-`syncNestedWorkspace` writes the files and runs `bun install` before it checks the result, so a failed sync leaves the written files for inspection.
+`syncNestedWorkspace` writes the files and runs `bun install` before it checks the result.
+When `bun install` fails or the result shows differences, it restores both files before it throws or returns, and throws an error saying so when it cannot restore them.
 Its `onManifestSync` option receives the replaced host entries and whether the sync added `trustedDependencies`, as soon as `package.json` is written and even when `bun install` then fails.
 
 Lower-level functions work on parsed files without touching the disk: `syncManifest`, `diffManifests`, `parseLockfile`, `relocateLockfile`, `applyManifestToLockfile`, `mergeLockfiles`, and the `find*` checks.

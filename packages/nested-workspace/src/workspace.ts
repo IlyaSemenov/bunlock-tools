@@ -9,11 +9,15 @@ import {
   findTransitiveMismatches,
   findUncoveredWorkspaces,
   findWorkspaceMismatches,
+  getWorkspacePatterns,
+  matchesWorkspacePatterns,
 } from "./check"
+import { getErrorMessage } from "./errors"
 import type { Lockfile } from "./lockfile"
 import { applyManifestToLockfile, mergeLockfiles, readLockfile, relocateLockfile } from "./lockfile"
 import type { ManifestDifference, ManifestSync, PackageManifest, ResolvedConfig } from "./manifest"
 import { diffManifests, readConfig, syncManifest } from "./manifest"
+import { isNestedPath } from "./paths"
 
 /** Host and nested root files loaded from disk. */
 export interface NestedWorkspace {
@@ -52,6 +56,54 @@ export async function loadNestedWorkspace(root: string): Promise<NestedWorkspace
       typeof nestedManifest.name === "string" ? nestedManifest.name : undefined,
     ),
   }
+}
+
+/**
+ * Returns whether a workspace path of the host lockfile is a workspace of the nested repository:
+ * its root, a workspace of the nested lockfile, or a directory that the nested `workspaces` patterns include.
+ */
+export function isNestedWorkspace(workspace: NestedWorkspace, workspacePath: string): boolean {
+  const { dir } = workspace.config
+  return (
+    workspacePath === dir ||
+    workspacePath in workspace.nestedLock.workspaces ||
+    (isNestedPath(workspacePath, dir) &&
+      matchesWorkspacePatterns(
+        getWorkspacePatterns(workspace.nestedManifest),
+        workspacePath.slice(dir.length + 1),
+      ))
+  )
+}
+
+/**
+ * Returns the first directory with a named package that the nested `workspaces` patterns include, relative to the host root.
+ *
+ * `bun install` treats the nested root as the workspace root there and writes the nested lockfile,
+ * while in the nested root itself it writes the host lockfile.
+ */
+export async function findNestedPackageDir(
+  workspace: NestedWorkspace,
+): Promise<string | undefined> {
+  const nestedRoot = path.join(workspace.root, workspace.config.dir)
+  const patterns = getWorkspacePatterns(workspace.nestedManifest)
+  const dirs = new Set<string>()
+  for (const pattern of patterns.included) {
+    for await (const file of new Bun.Glob(`${pattern}/package.json`).scan(nestedRoot)) {
+      const dir = path.posix.normalize(path.posix.dirname(file.split(path.sep).join("/")))
+      if (matchesWorkspacePatterns(patterns, dir)) {
+        dirs.add(dir)
+      }
+    }
+  }
+  for (const dir of [...dirs].sort()) {
+    const manifest = (await Bun.file(
+      path.join(nestedRoot, dir, "package.json"),
+    ).json()) as PackageManifest
+    if (typeof manifest.name === "string" && manifest.name) {
+      return `${workspace.config.dir}/${dir}`
+    }
+  }
+  return undefined
 }
 
 /** Differences between the host files and the nested checkout; all lists are empty when the host is in sync. */
@@ -140,11 +192,15 @@ export interface SyncOptions {
   onManifestSync?: (sync: ManifestSync) => void
 }
 
-/** Result of `syncNestedWorkspace`. */
+/**
+ * Result of `syncNestedWorkspace`.
+ *
+ * The sync failed and restored the host files when `ownDependencyChanges` is not empty or `isInSync(check)` is false.
+ */
 export interface SyncResult {
-  /** Own dependencies of host workspaces that the sync re-resolved; the sync failed when this is not empty. */
+  /** Own dependencies of host workspaces that the sync re-resolved. */
   ownDependencyChanges: DependencyMismatch[]
-  /** Check of the synced files; the sync failed when it is not in sync. */
+  /** Check of the synced files. */
   check: CheckResult
 }
 
@@ -153,6 +209,9 @@ export interface SyncResult {
  *
  * Writes the synced `package.json`, writes the merged `bun.lock`, runs `bun install`,
  * and then compares the result with the nested checkout and with the original host resolutions.
+ * When `bun install` fails or the result differs, restores both files before it throws or returns,
+ * so that the next sync starts from the original host resolutions.
+ * Throws an error that says so when it cannot restore them.
  */
 export async function syncNestedWorkspace(
   root: string,
@@ -171,27 +230,89 @@ export async function syncNestedWorkspace(
     workspace.config.dir,
   )
 
-  const manifestText = formatJson(manifest, workspace.manifestText)
-  if (manifestText !== workspace.manifestText) {
-    await Bun.write(path.join(root, "package.json"), manifestText)
+  const manifestPath = path.join(root, "package.json")
+  const lockPath = path.join(root, "bun.lock")
+  const originals = new Map([
+    [manifestPath, workspace.manifestText],
+    [lockPath, await Bun.file(lockPath).text()],
+  ])
+  // Covers changes of package.json by lifecycle scripts of bun install as well.
+  const restore = async () => {
+    const failures = await restoreFiles(originals)
+    if (failures.length) {
+      throw new Error(
+        [
+          "The sync failed and could not restore the host files:",
+          ...failures.map(
+            ({ file, error }) => `  ${path.basename(file)}: ${getErrorMessage(error)}`,
+          ),
+          "Restore them before running the sync again.",
+        ].join("\n"),
+      )
+    }
   }
-  options.onManifestSync?.(manifestSync)
 
-  await Bun.write(path.join(root, "bun.lock"), renderBunLock(merged))
+  let result: SyncResult
+  try {
+    const manifestText = formatJson(manifest, workspace.manifestText)
+    if (manifestText !== workspace.manifestText) {
+      await Bun.write(manifestPath, manifestText)
+    }
+    options.onManifestSync?.(manifestSync)
 
-  await runBunInstall(root, options.installArgs)
+    await Bun.write(lockPath, renderBunLock(merged))
 
-  const synced = await loadNestedWorkspace(root)
-  return {
-    // The committed host lockfile alone pins the own dependencies of the host.
-    ownDependencyChanges: findOwnDependencyChanges(
-      workspace.lock,
-      synced.lock,
-      workspace.nestedLock,
-      workspace.config.dir,
-    ),
-    check: checkNestedWorkspace(synced),
+    await runBunInstall(root, options.installArgs)
+
+    const synced = await loadNestedWorkspace(root)
+    result = {
+      // The committed host lockfile alone pins the own dependencies of the host.
+      ownDependencyChanges: findOwnDependencyChanges(
+        workspace.lock,
+        synced.lock,
+        workspace.nestedLock,
+        workspace.config.dir,
+      ),
+      check: checkNestedWorkspace(synced),
+    }
+  } catch (error) {
+    await restore()
+    throw error
   }
+  if (result.ownDependencyChanges.length || !isInSync(result.check)) {
+    await restore()
+  }
+  return result
+}
+
+/** File that `restoreFiles` could not restore. */
+export interface RestoreFailure {
+  file: string
+  error: unknown
+}
+
+/**
+ * Writes back the original texts of files whose contents differ from them and returns the files it could not restore.
+ *
+ * Restores each file separately, so that a failure does not keep the other files changed.
+ */
+export async function restoreFiles(
+  originals: ReadonlyMap<string, string>,
+): Promise<RestoreFailure[]> {
+  const failures: RestoreFailure[] = []
+  for (const [file, text] of originals) {
+    try {
+      const current = await Bun.file(file)
+        .text()
+        .catch(() => undefined)
+      if (current !== text) {
+        await Bun.write(file, text)
+      }
+    } catch (error) {
+      failures.push({ file, error })
+    }
+  }
+  return failures
 }
 
 /** Serializes JSON with the indentation and final newline of the original text. */

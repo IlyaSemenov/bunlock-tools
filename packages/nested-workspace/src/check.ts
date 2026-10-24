@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import type { BunPackageEntry } from "bunlock-lockfile"
 import { resolveDependencyLockKey } from "bunlock-lockfile"
 
@@ -33,22 +35,64 @@ export interface PackageMismatch {
   actual?: string
 }
 
-/** Returns the nested workspace paths that the host `workspaces` patterns do not include. */
-export function findUncoveredWorkspaces(manifest: PackageManifest, nestedLock: Lockfile): string[] {
+/** `workspaces` patterns of a root `package.json`, without the leading `./`, the trailing slash, and the `!` of exclusions. */
+export interface WorkspacePatterns {
+  included: string[]
+  excluded: string[]
+}
+
+/** Returns the `workspaces` patterns of a root `package.json`. */
+export function getWorkspacePatterns(manifest: PackageManifest): WorkspacePatterns {
   const patterns = (
     Array.isArray(manifest.workspaces) ? manifest.workspaces : (manifest.workspaces?.packages ?? [])
   ).map(pattern => pattern.replace(/^(!?)\.\//, "$1").replace(/\/+$/, ""))
-  const included = patterns
-    .filter(pattern => !pattern.startsWith("!"))
-    .map(pattern => new Bun.Glob(pattern))
-  const excluded = patterns
-    .filter(pattern => pattern.startsWith("!"))
-    .map(pattern => new Bun.Glob(pattern.slice(1)))
+  return {
+    included: patterns.filter(pattern => !pattern.startsWith("!")),
+    excluded: patterns.filter(pattern => pattern.startsWith("!")).map(pattern => pattern.slice(1)),
+  }
+}
 
+/**
+ * Returns whether the patterns include a directory relative to their root, as `bun install` decides it.
+ *
+ * The root itself is never included.
+ * A pattern without glob syntax includes its exact path regardless of exclusions.
+ * A glob pattern matches the `package.json` path of the directory, so `dir/**` includes `dir` itself,
+ * and skips `node_modules`, `.git`, and `CMakeFiles` directories.
+ * An exclusion `dir/**` also excludes `dir` itself.
+ */
+export function matchesWorkspacePatterns(patterns: WorkspacePatterns, dir: string): boolean {
+  const isGlob = (pattern: string) => /[*?[\]{}]/.test(pattern)
+  const matches = (pattern: string) => new Bun.Glob(pattern).match(dir)
+  const matchesManifest = (pattern: string) =>
+    new Bun.Glob(path.posix.join(pattern, "package.json")).match(
+      path.posix.join(dir, "package.json"),
+    )
+
+  if (path.posix.normalize(dir) === ".") {
+    return false
+  }
+  if (
+    patterns.included.some(pattern => !isGlob(pattern) && path.posix.normalize(pattern) === dir)
+  ) {
+    return true
+  }
+  return (
+    !dir.split("/").some(part => ignoredGlobDirs.has(part)) &&
+    patterns.included.some(pattern => isGlob(pattern) && matchesManifest(pattern)) &&
+    !patterns.excluded.some(
+      pattern => matches(pattern) || (pattern.endsWith("/**") && matches(pattern.slice(0, -3))),
+    )
+  )
+}
+
+const ignoredGlobDirs = new Set(["node_modules", ".git", "CMakeFiles"])
+
+/** Returns the nested workspace paths that the host `workspaces` patterns do not include. */
+export function findUncoveredWorkspaces(manifest: PackageManifest, nestedLock: Lockfile): string[] {
+  const patterns = getWorkspacePatterns(manifest)
   return Object.keys(nestedLock.workspaces).filter(
-    workspacePath =>
-      !included.some(glob => glob.match(workspacePath)) ||
-      excluded.some(glob => glob.match(workspacePath)),
+    workspacePath => !matchesWorkspacePatterns(patterns, workspacePath),
   )
 }
 

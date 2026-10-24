@@ -4,11 +4,13 @@
 
 import { getErrorMessage } from "./errors"
 import type { ManifestDifference, ManifestSync, OverriddenEntry } from "./manifest"
-import type { CheckResult } from "./workspace"
+import type { CheckResult, NestedWorkspace } from "./workspace"
 import {
   BunInstallError,
   checkNestedWorkspace,
+  findNestedPackageDir,
   isInSync,
+  isNestedWorkspace,
   loadNestedWorkspace,
   syncNestedWorkspace,
 } from "./workspace"
@@ -18,6 +20,8 @@ const usage = `Usage:
   bun-nested-workspace --check                Exit with 1 if package.json or bun.lock lag behind the nested checkout
 
 Configure the nested directory in the "bun-nested-workspace" field of the host package.json.`
+
+const restoredMessage = "Restored package.json and bun.lock to their contents before the sync."
 
 /** Runs the CLI with the given arguments in the given host root and returns the exit code. */
 async function runCli(args: readonly string[], root: string = process.cwd()): Promise<number> {
@@ -38,6 +42,7 @@ async function runCli(args: readonly string[], root: string = process.cwd()): Pr
     return await runSync(root, args)
   } catch (error) {
     if (error instanceof BunInstallError) {
+      console.error(restoredMessage)
       return error.exitCode
     }
     console.error(getErrorMessage(error))
@@ -74,7 +79,7 @@ async function runSync(root: string, installArgs: readonly string[]) {
     console.error(
       [
         "The sync changed own dependencies of host packages.",
-        "Either the host bun.lock did not pin them: restore bun.lock, run bun install, commit bun.lock, and sync again.",
+        "Either the host bun.lock did not pin them: run bun install, commit bun.lock, and sync again.",
         "Or the nested lockfile resolves them outside the host range: align the host range with the nested version.",
         ...ownDependencyChanges.map(({ workspace, dependency, expected, actual }) =>
           formatChange(`${workspace} > ${dependency}`, expected, actual),
@@ -87,9 +92,32 @@ async function runSync(root: string, installArgs: readonly string[]) {
     console.error(
       ["bun install did not keep the nested resolutions:", ...formatCheckResult(check)].join("\n"),
     )
+    // bun install records the nested workspaces from their package.json files,
+    // so a difference in a workspace of the nested repository means that the nested lockfile lags behind them.
+    const workspace = await loadNestedWorkspace(root)
+    if (check.workspaces.some(workspacePath => isNestedWorkspace(workspace, workspacePath))) {
+      console.error(await formatNestedLockfileUpdate(workspace))
+    }
     exitCode = 1
   }
+  if (exitCode) {
+    console.error(restoredMessage)
+  }
   return exitCode
+}
+
+/** Formats how to update a nested lockfile that lags behind the nested package.json files. */
+async function formatNestedLockfileUpdate(workspace: NestedWorkspace) {
+  const { dir } = workspace.config
+  const packageDir = await findNestedPackageDir(workspace)
+  return packageDir
+    ? `${dir}/bun.lock lags behind the package.json files of ${dir}. Update it and sync again:\n  (cd ${quoteShellArgument(packageDir)} && bun install --lockfile-only)`
+    : `${dir}/bun.lock lags behind the package.json files of ${dir}. Update it with bun install --lockfile-only in a separate clone of the nested repository and sync again.`
+}
+
+/** Quotes a value for a POSIX shell when it contains characters other than those of plain paths. */
+function quoteShellArgument(value: string) {
+  return /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`
 }
 
 function printManifestSync({ overridden, addedTrustedDependencies }: ManifestSync) {
