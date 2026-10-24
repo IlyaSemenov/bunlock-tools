@@ -1,0 +1,12 @@
+mid:
+  ✅ 2.0.0
+    used by:
+      - example > other: 2.0.0
+  ❌ 1.0.0
+    used by:
+      - example > app: *
+    held back by:
+      - example > app > mid@2.0.0 > leaf: npm:real@^1.0.0 would not resolve
+
+1 duplicate package in bun.lock.
+1 package cannot be deduped.

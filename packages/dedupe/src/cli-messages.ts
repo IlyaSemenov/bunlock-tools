@@ -1,8 +1,9 @@
 import { parseBunLock } from "bunlock-lockfile"
 
 import type { DuplicatePackageInfo } from "./dedupe/analyze"
-import { analyzeDuplicatePackages, evaluateRequestCompatibility } from "./dedupe/analyze"
+import { evaluateRequestCompatibility } from "./dedupe/analyze"
 import { formatDuplicatesReport, updateIdentity } from "./dedupe/format"
+import { analyzeDuplicatePackages } from "./dedupe/plan"
 import {
   isSuggestedTarget,
   resolveSuggestedUnlock,

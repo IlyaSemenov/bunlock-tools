@@ -15,6 +15,8 @@ import semver from "semver"
 
 import { compareStrings } from "../utils"
 
+import { collectVersionRewrites, type RewriteByPackage } from "./rewrite"
+
 export type ResolvedPackage = {
   /** Lockfile key, e.g. `react` or `some-parent/react`. */
   lockKey: string
@@ -81,6 +83,35 @@ export type DuplicateVersionInfo = {
   dedupeTargetVersion?: string
   /** Requests that resolve to this exact version. */
   requests: DependencyRequest[]
+  /**
+   * Dependencies that the rewrite of this version would leave unresolved, resolve to another package, or resolve
+   * outside their ranges.
+   *
+   * Present on a `cannot-dedupe` version whose inbound requests all accept a target,
+   * but whose rewrite is held back to keep the rewritten lockfile consistent.
+   */
+  dependencyConflicts?: DependencyConflict[]
+}
+
+/**
+ * A dependency that a dedupe rewrite would leave unresolved, resolve to another
+ * package, or resolve outside its effective range.
+ */
+export type DependencyConflict = {
+  /**
+   * Display path of the requester: the path from a workspace in the input lockfile when the requester is reachable there,
+   * otherwise its lock key; the last element names the requester's version in the rewritten lockfile.
+   */
+  requesterPath: string[]
+  /** Lock key of the requesting package entry; absent for a workspace requester. */
+  requesterLockKey?: string
+  dependencyName: string
+  /** Declared dependency range exactly as it appears in package metadata. */
+  range: string
+  /** Effective range from bun.lock, when an override replaces `range`. */
+  overrideRange?: string
+  /** Package spec the dependency would resolve to; absent when it would not resolve at all. */
+  resolvedSpec?: string
 }
 
 /**
@@ -97,7 +128,6 @@ export type DuplicatePackageInfo = {
   versions: DuplicateVersionInfo[]
 }
 
-type RewriteByPackage = Map<string, Map<string, string>>
 type TemplatesByPackageAndVersion = Map<string, Map<string, string>>
 
 type OrphanDetectionContext = {
@@ -355,7 +385,7 @@ function collectDependencyGraph(
  * The graph may contain shared subgraphs; the first discovered parent is used
  * only for display, not for dedupe safety decisions.
  */
-function attachRequestPaths(graph: DependencyGraph): void {
+function attachRequestPaths(graph: DependencyGraph): (nodeId: string) => string[] | undefined {
   const parents = new Map<string, string | undefined>()
   const traverseFrom = (startNodeId: string): void => {
     if (parents.has(startNodeId)) {
@@ -413,28 +443,7 @@ function attachRequestPaths(graph: DependencyGraph): void {
   for (const request of graph.requests) {
     request.requestPath = buildPathLabels(request.requesterNodeId)
   }
-}
-
-function collectVersionRewrites(duplicates: DuplicatePackageInfo[]): RewriteByPackage {
-  const rewrites: RewriteByPackage = new Map()
-
-  for (const duplicate of duplicates) {
-    for (const versionInfo of duplicate.versions) {
-      if (
-        versionInfo.status !== "can-dedupe" ||
-        !versionInfo.dedupeTargetVersion ||
-        versionInfo.dedupeTargetVersion === versionInfo.version
-      ) {
-        continue
-      }
-
-      const perVersion = rewrites.get(duplicate.name) ?? new Map<string, string>()
-      perVersion.set(versionInfo.version, versionInfo.dedupeTargetVersion)
-      rewrites.set(duplicate.name, perVersion)
-    }
-  }
-
-  return rewrites
+  return nodeId => (parents.has(nodeId) ? buildPathLabels(nodeId) : undefined)
 }
 
 function collectTemplateLockKeys(
@@ -539,13 +548,20 @@ function requestWillBeRemovedByRequesterRewrite(
 }
 
 /**
- * Analyze duplicate package versions and classify which versions can be
- * rewritten safely using only entries already present in the lockfile.
+ * Classify duplicate package versions by whether every inbound request accepts
+ * a target already present in the lockfile.
+ *
+ * @param heldBack Dependency conflicts of package versions, keyed by
+ * `name@version`, whose rewrite must stay held back; such versions are
+ * classified as `cannot-dedupe`.
  */
-export function analyzeDuplicatePackages(lock: BunLockFile): DuplicatePackageInfo[] {
+export function classifyDuplicatePackages(
+  lock: BunLockFile,
+  heldBack: ReadonlyMap<string, DependencyConflict[]> = new Map(),
+): DuplicatePackageInfo[] {
   const packagesByLockKey = collectResolvedPackages(lock)
   const graph = collectDependencyGraph(lock, packagesByLockKey)
-  attachRequestPaths(graph)
+  const buildPathLabels = attachRequestPaths(graph)
 
   const packagesByName = new Map<string, ResolvedPackage[]>()
   for (const packageEntry of packagesByLockKey.values()) {
@@ -719,6 +735,32 @@ export function analyzeDuplicatePackages(lock: BunLockFile): DuplicatePackageInf
       targetVersion,
       versions: versionRows,
     })
+  }
+
+  for (const duplicate of duplicates) {
+    for (const versionInfo of duplicate.versions) {
+      const dependencyConflicts = heldBack.get(
+        duplicateVersionKey(duplicate.name, versionInfo.version),
+      )
+      if (versionInfo.status !== "can-dedupe" || !dependencyConflicts) continue
+
+      versionInfo.status = "cannot-dedupe"
+      delete versionInfo.dedupeTargetVersion
+      // A rewrite keeps the lock key of the requester, so the path to that key in the input matches `used by`;
+      // only the requester itself changes to its rewritten version.
+      versionInfo.dependencyConflicts = dependencyConflicts.map(conflict => {
+        const path =
+          conflict.requesterLockKey === undefined
+            ? undefined
+            : buildPathLabels(conflict.requesterLockKey)
+        return path
+          ? {
+              ...conflict,
+              requesterPath: [...path.slice(0, -1), ...conflict.requesterPath.slice(-1)],
+            }
+          : conflict
+      })
+    }
   }
 
   const orphanDetectionContext: OrphanDetectionContext = {

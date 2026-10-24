@@ -4,7 +4,7 @@ import { parseBunLock } from "bunlock-lockfile"
 
 import type { PackageMetadata } from "../registry"
 
-import { analyzeDuplicatePackages } from "./analyze"
+import { analyzeDuplicatePackages } from "./plan"
 import { classifyUpdateSafety, updateAndDedupeLockText } from "./update-fix"
 
 type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>

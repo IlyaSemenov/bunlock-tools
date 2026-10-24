@@ -1,0 +1,13 @@
+x:
+  ✅ 2.0.0
+    used by:
+      - example > other: 2.0.0
+  ⬆️ 1.0.0 → 2.0.0
+    used by:
+      - example > y: *
+
+3 duplicate packages in bun.lock.
+1 package can be deduped.
+2 packages cannot be deduped.
+
+Run with --fix to apply available dedupes.

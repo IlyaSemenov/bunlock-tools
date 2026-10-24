@@ -1,0 +1,32 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "example",
+      "dependencies": {
+        "app": "1.0.0",
+        "leaf": "*",
+        "other": "1.0.0",
+        "tool": "1.0.0",
+      },
+    },
+  },
+  "packages": {
+    "app": ["app@1.0.0", "", { "dependencies": { "mid": "*" } }, "sha"],
+
+    "leaf": ["leaf@1.0.0", "", {}, "sha"],
+
+    "other": ["other@1.0.0", "", { "dependencies": { "mid": "2.0.0" } }, "sha"],
+
+    "tool": ["tool@1.0.0", "", { "dependencies": { "leaf": "2.0.0" } }, "sha"],
+
+    "app/mid": ["mid@1.0.0", "", { "dependencies": { "leaf": "*" } }, "sha"],
+
+    "other/mid": ["mid@2.0.0", "", { "dependencies": { "leaf": "^1.0.0" } }, "sha"],
+
+    "other/mid/leaf": ["leaf@1.5.0", "", {}, "sha"],
+
+    "tool/leaf": ["leaf@2.0.0", "", {}, "sha"],
+  },
+}

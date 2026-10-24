@@ -15,8 +15,8 @@ import semver from "semver"
 
 import { createPackumentCache, fetchPackageMetadata, type PackageMetadata } from "../registry"
 
-import type { DedupeLockResult } from "./rewrite"
-import { dedupeLockText } from "./rewrite"
+import type { DedupeLockResult } from "./plan"
+import { dedupeLockText } from "./plan"
 import {
   analyzeDuplicatePackagesWithUpdates,
   type SuggestedUpdate,
@@ -316,9 +316,9 @@ function findContextConflicts(
   for (const applicable of updates) {
     const { update, meta } = applicable
     const entry = packages[update.requesterLockKey]
-    // Dedupe may rewrite or prune the updated entry itself; a surviving tuple
-    // with a different spec came from elsewhere in the lockfile and its
-    // metadata was already consistent there.
+    // Dedupe may rewrite or prune the updated entry itself; dedupe holds back
+    // every rewrite that would leave a dependency of a rewritten tuple outside
+    // its range, so a surviving tuple with a different spec is consistent.
     if (!isPackageEntry(entry) || entry[0] !== `${update.packageName}@${update.toVersion}`) {
       continue
     }

@@ -1,0 +1,32 @@
+leaf:
+  ✅ 2.0.0
+    used by:
+      - example > other > mid: ^2.0.0
+  ❌ 1.0.0
+    blocked by:
+      - example: 1.0.0
+      - mid: ^1.0.0
+
+mid:
+  ✅ 2.0.0
+    used by:
+      - example > other: 2.0.0
+  ❌ 1.0.0
+    used by:
+      - app: *
+    held back by:
+      - app > mid@2.0.0 > leaf: ^2.0.0 would resolve to leaf@1.0.0
+
+x:
+  ✅ 2.0.0
+    used by:
+      - example > other: 2.0.0
+  ⬆️ 1.0.0 → 2.0.0
+    used by:
+      - example > y: *
+
+3 duplicate packages in bun.lock.
+1 package can be deduped.
+2 packages cannot be deduped.
+
+Run with --fix to apply available dedupes.

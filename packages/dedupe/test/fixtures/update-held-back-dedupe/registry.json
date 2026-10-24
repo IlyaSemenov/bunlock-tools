@@ -1,0 +1,18 @@
+{
+  "versions": {
+    "app": ["1.0.0", "1.1.0"]
+  },
+  "metadata": {
+    "app": {
+      "1.1.0": {
+        "version": "1.1.0",
+        "dependencies": {
+          "mid": "*"
+        },
+        "dist": {
+          "integrity": "sha-app-1.1.0"
+        }
+      }
+    }
+  }
+}

@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 
 import { type BunLockFile, parseBunLock } from "bunlock-lockfile"
 
-import { analyzeDuplicatePackages, evaluateRequestCompatibility } from "./analyze"
-import { dedupeLockText } from "./rewrite"
+import { evaluateRequestCompatibility } from "./analyze"
+import { analyzeDuplicatePackages, dedupeLockText } from "./plan"
 
 test("an unsupported override specifier does not fall back", () => {
   expect(
@@ -278,5 +278,100 @@ describe("dedupeLockText", () => {
       "useful",
       "lib",
     ])
+  })
+})
+
+describe("held-back rewrites", () => {
+  const renderLock = (packages: string) => `{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "example",
+      "dependencies": {
+        "app": "1.0.0",
+        "leaf": "2.0.0",
+        "other": "1.0.0"
+      }
+    }
+  },
+  "packages": {
+${packages}
+  }
+}
+`
+
+  test("a conflict kept from the input does not hold back a rewrite", () => {
+    const lockText = renderLock(`
+    "app": ["app@1.0.0", "", { "dependencies": { "broken": "1.0.0", "mid": "*" } }, "sha"],
+
+    "app/broken": ["broken@1.0.0", "", { "dependencies": { "leaf": "^1.0.0" } }, "sha"],
+
+    "app/mid": ["mid@1.0.0", "", {}, "sha"],
+
+    "leaf": ["leaf@2.0.0", "", {}, "sha"],
+
+    "other": ["other@1.0.0", "", { "dependencies": { "mid": "2.0.0" } }, "sha"],
+
+    "other/mid": ["mid@2.0.0", "", {}, "sha"]`)
+
+    const result = dedupeLockText(lockText)
+
+    expect(result.rewrittenPackages).toBe(1)
+    expect(parseBunLock(result.lockText).packages?.["app/mid"]?.[0]).toBe("mid@2.0.0")
+  })
+
+  describe("an npm: alias whose package name also reads as a range", () => {
+    const renderAliasLock = (rootLeaf: string) =>
+      renderLock(`
+    "app": ["app@1.0.0", "", { "dependencies": { "mid": "*" } }, "sha"],
+
+    "app/mid": ["mid@1.0.0", "", {}, "sha"],
+
+    "leaf": ["${rootLeaf}", "", {}, "sha"],
+
+    "other": ["other@1.0.0", "", { "dependencies": { "mid": "2.0.0" } }, "sha"],
+
+    "other/mid": ["mid@2.0.0", "", { "dependencies": { "leaf": "npm:x@^1.0.0" } }, "sha"]`)
+
+    test("resolving to the aliased package allows the rewrite", () => {
+      expect(dedupeLockText(renderAliasLock("x@1.0.0")).rewrittenPackages).toBe(1)
+    })
+
+    test("resolving to another package holds back the rewrite", () => {
+      expect(dedupeLockText(renderAliasLock("leaf@1.0.0")).changed).toBe(false)
+    })
+  })
+
+  test("a conflict whose requirement changes on the same edge holds back the rewrite", () => {
+    const lockText = renderLock(`
+    "app": ["app@1.0.0", "", { "dependencies": { "mid": "*" } }, "sha"],
+
+    "app/mid": ["mid@1.0.0", "", { "dependencies": { "leaf": "^1.0.0" } }, "sha"],
+
+    "leaf": ["leaf@2.0.0", "", {}, "sha"],
+
+    "other": ["other@1.0.0", "", { "dependencies": { "mid": "2.0.0" } }, "sha"],
+
+    "other/mid": ["mid@2.0.0", "", { "dependencies": { "leaf": "^3.0.0" } }, "sha"],
+
+    "other/mid/leaf": ["leaf@3.0.0", "", {}, "sha"]`)
+
+    const mid = analyzeDuplicatePackages(parseBunLock(lockText)).find(
+      duplicate => duplicate.name === "mid",
+    )
+
+    expect(dedupeLockText(lockText).changed).toBe(false)
+    expect(mid?.versions.find(version => version.version === "1.0.0")).toMatchObject({
+      status: "cannot-dedupe",
+      dependencyConflicts: [
+        {
+          requesterPath: ["example", "app", "mid@2.0.0"],
+          dependencyName: "leaf",
+          range: "^3.0.0",
+          resolvedSpec: "leaf@2.0.0",
+        },
+      ],
+    })
   })
 })

@@ -15,11 +15,8 @@ import type { ProgressFn } from "../progress"
 import { fetchCompatibleVersions, fetchPackageMetadata, type PackumentCache } from "../registry"
 
 import type { DuplicatePackageInfo } from "./analyze"
-import {
-  analyzeDuplicatePackages,
-  effectiveRequestRange,
-  evaluateRequestCompatibility,
-} from "./analyze"
+import { effectiveRequestRange, evaluateRequestCompatibility } from "./analyze"
+import { analyzeDuplicatePackages } from "./plan"
 
 type VersionUnlock = {
   name: string
@@ -75,6 +72,16 @@ function versionUnlockKey(name: string, fromVersion: string): string {
 
 function requesterUnlockKey(requesterLockKey: string, name: string, fromVersion: string): string {
   return `${requesterLockKey}\0${versionUnlockKey(name, fromVersion)}`
+}
+
+/**
+ * Whether a version stays only because some inbound request rejects every target.
+ *
+ * A version held back for its dependency conflicts is excluded: a change of its inbound ranges alone does not make the
+ * held-back rewrite safe.
+ */
+function isBlockedByRequests(versionInfo: DuplicatePackageInfo["versions"][number]): boolean {
+  return versionInfo.status === "cannot-dedupe" && !versionInfo.dependencyConflicts
 }
 
 function isUpdateTarget(
@@ -178,7 +185,7 @@ function collectBlockedDuplicates(
   const blocked: string[] = []
   for (const duplicate of duplicates) {
     for (const versionInfo of duplicate.versions) {
-      if (versionInfo.status !== "cannot-dedupe") continue
+      if (!isBlockedByRequests(versionInfo)) continue
       for (const request of versionInfo.requests) {
         if (request.requesterNodeId === requesterLockKey) {
           blocked.push(duplicate.name)
@@ -310,7 +317,7 @@ function collectRequesterPaths(duplicates: DuplicatePackageInfo[]): Map<string, 
 
   for (const duplicate of duplicates) {
     for (const versionInfo of duplicate.versions) {
-      if (versionInfo.status !== "cannot-dedupe") continue
+      if (!isBlockedByRequests(versionInfo)) continue
 
       for (const request of versionInfo.requests) {
         if (paths.has(request.requesterNodeId)) continue
@@ -341,7 +348,7 @@ function collectBlockingRequesters(
 
   for (const duplicate of duplicates) {
     for (const versionInfo of duplicate.versions) {
-      if (versionInfo.status !== "cannot-dedupe") continue
+      if (!isBlockedByRequests(versionInfo)) continue
 
       for (const request of versionInfo.requests) {
         const lockKey = request.requesterNodeId
@@ -579,7 +586,7 @@ function pruneIncompleteUnlocks(
 
   for (const duplicate of duplicates) {
     for (const versionInfo of duplicate.versions) {
-      if (versionInfo.status !== "cannot-dedupe") continue
+      if (!isBlockedByRequests(versionInfo)) continue
 
       // Eligible retained versions are already ordered newest first. Choose
       // the first accepted by every unchanged request or proposed update.

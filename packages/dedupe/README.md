@@ -95,7 +95,7 @@ undici-types:
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | ✅   | **Target** — the version that will be kept                                                                                              |
 | ⬆️   | **Can dedupe** — can be upgraded to the target; `--fix` will do this automatically                                                      |
-| ❌   | **Cannot dedupe** — requires a version incompatible with the target; needs manual resolution                                            |
+| ❌   | **Cannot dedupe** — cannot be upgraded to the target; needs manual resolution                                                           |
 | 🗑️   | **Orphan** — will become unreachable after the package listed in `removed after` is deduped, updated, or removed; no action needed      |
 | ✋   | **Manual update** — an intermediate package update could remove this version, but `--update --fix` cannot safely apply it automatically |
 | ❓   | **Unknown** — uses a non-semver range (e.g. `catalog:`, `workspace:`) that cannot be checked automatically                              |

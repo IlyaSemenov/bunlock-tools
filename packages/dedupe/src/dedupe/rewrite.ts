@@ -7,34 +7,27 @@ import {
   isResolvedDependencyReachable,
   normalizeDependencyMap,
   packageEntryMeta,
-  parseBunLock,
   parseResolvedSpec,
-  renderBunLock,
 } from "bunlock-lockfile"
 
-import { analyzeDuplicatePackages, type DuplicatePackageInfo } from "./analyze"
+import type { DuplicatePackageInfo } from "./analyze"
 
-type RewriteByPackage = Map<string, Map<string, string>>
+/** Target version of each rewritten package version, keyed by package name and then by source version. */
+export type RewriteByPackage = Map<string, Map<string, string>>
+
+/**
+ * Rewrites that replaced or deleted each lock key, as `name@version` of the rewritten source version.
+ *
+ * Pruning is not recorded: it removes only entries that no reachable edge resolves to,
+ * and nested entries whose fallback is an identical tuple with the same dependency resolutions.
+ */
+export type RewriteProvenance = Map<string, Set<string>>
+
 type PackageTemplate = { lockKey: string; entry: BunPackageEntry }
 type TemplatesByPackage = Map<string, Map<string, PackageTemplate>>
 
-/** Summary returned by the text-level lockfile rewrite API. */
-export type DedupeLockResult = {
-  /** True when returned `lockText` should replace the input. */
-  changed: boolean
-  lockText: string
-  /** Total entries touched; equals `rewrittenEntries + prunedEntries`. */
-  touchedEntries: number
-  /** Number of entries touched by dedupe rewrites across all passes. */
-  rewrittenEntries: number
-  /** Number of unreachable package entries removed across all passes. */
-  prunedEntries: number
-  /** Number of distinct package names directly rewritten for deduplication. */
-  rewrittenPackages: number
-}
-
 /** Convert analyzer rows into the package/version rewrite table used by fix. */
-function collectVersionRewrites(duplicates: DuplicatePackageInfo[]): RewriteByPackage {
+export function collectVersionRewrites(duplicates: DuplicatePackageInfo[]): RewriteByPackage {
   const rewrites: RewriteByPackage = new Map()
 
   for (const duplicate of duplicates) {
@@ -288,7 +281,7 @@ function collectWorkspacePackageKeys(lock: BunLockFile): Set<string> {
  * points at them, because Bun lockfiles may include local workspaces as package
  * keys.
  */
-function pruneUnreachableEntries(
+export function pruneUnreachableEntries(
   lock: BunLockFile,
   packages: Record<string, BunPackageEntry>,
 ): number {
@@ -347,11 +340,14 @@ function pruneUnreachableEntries(
  *
  * A pass may unlock new rewrites by deleting or replacing requester entries, so
  * `dedupeLockText` runs this repeatedly until no more entries change.
+ *
+ * @param provenance Receives the rewrite that replaced or deleted each lock key.
  */
-function rewriteEntries(
+export function rewriteEntries(
   lock: BunLockFile,
   packages: Record<string, BunPackageEntry>,
   rewrites: RewriteByPackage,
+  provenance: RewriteProvenance,
 ): { touchedEntries: number; touchedPackageNames: Set<string> } {
   const { templates, rootVersions } = collectPackageIndex(packages)
   const touchedPackageNames = new Set<string>()
@@ -379,11 +375,13 @@ function rewriteEntries(
       continue
     }
 
+    const rewriteKey = `${parsed.name}@${parsed.version}`
     if (lockKey !== parsed.name && rootVersions.get(parsed.name) === targetVersion) {
       const prefix = `${lockKey}/`
       for (const candidateKey of Object.keys(packages)) {
         if (candidateKey === lockKey || candidateKey.startsWith(prefix)) {
           delete packages[candidateKey]
+          recordProvenance(provenance, candidateKey, rewriteKey)
           touchedEntries += 1
         }
       }
@@ -396,6 +394,7 @@ function rewriteEntries(
     packages[lockKey] = clonePackageEntry(replacement.entry, {
       stripBundled: replacement.lockKey !== lockKey,
     })
+    recordProvenance(provenance, lockKey, rewriteKey)
     touchedEntries += 1
     touchedPackageNames.add(parsed.name)
   }
@@ -410,58 +409,8 @@ function rewriteEntries(
   }
 }
 
-/**
- * Parse, rewrite, prune, and render a bun.lock string.
- *
- * The fixed-point loop is intentional: rewrites and standalone unreachable
- * pruning can each change the graph enough to unlock another dedupe pass.
- *
- * @param lockText Raw `bun.lock` text, not a parsed object, so the full
- * parse/rewrite/render path is exercised.
- */
-export function dedupeLockText(lockText: string): DedupeLockResult {
-  const parsedLock = parseBunLock(lockText)
-  const packages = parsedLock.packages ?? {}
-  parsedLock.packages = packages
-
-  let touchedEntries = 0
-  let rewrittenEntries = 0
-  let prunedEntries = 0
-  const touchedPackageNames = new Set<string>()
-
-  for (let pass = 0; pass < 50; pass += 1) {
-    const duplicateGroups = analyzeDuplicatePackages(parsedLock)
-    const rewrites = collectVersionRewrites(duplicateGroups)
-    const rewriteResult = rewriteEntries(parsedLock, packages, rewrites)
-    const passPrunedEntries = pruneUnreachableEntries(parsedLock, packages)
-    const passTouchedEntries = rewriteResult.touchedEntries + passPrunedEntries
-    if (passTouchedEntries === 0) break
-
-    touchedEntries += passTouchedEntries
-    rewrittenEntries += rewriteResult.touchedEntries
-    prunedEntries += passPrunedEntries
-    for (const name of rewriteResult.touchedPackageNames) {
-      touchedPackageNames.add(name)
-    }
-  }
-
-  if (touchedEntries === 0) {
-    return {
-      changed: false,
-      lockText,
-      touchedEntries: 0,
-      rewrittenEntries: 0,
-      prunedEntries: 0,
-      rewrittenPackages: 0,
-    }
-  }
-
-  return {
-    changed: true,
-    lockText: renderBunLock(parsedLock),
-    touchedEntries,
-    rewrittenEntries,
-    prunedEntries,
-    rewrittenPackages: touchedPackageNames.size,
-  }
+function recordProvenance(provenance: RewriteProvenance, lockKey: string, rewriteKey: string) {
+  const rewriteKeys = provenance.get(lockKey) ?? new Set<string>()
+  rewriteKeys.add(rewriteKey)
+  provenance.set(lockKey, rewriteKeys)
 }

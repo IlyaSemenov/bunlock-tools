@@ -1,4 +1,4 @@
-import type { DuplicatePackageInfo, DuplicateVersionInfo } from "./analyze"
+import type { DependencyConflict, DuplicatePackageInfo, DuplicateVersionInfo } from "./analyze"
 import { evaluateRequestCompatibility } from "./analyze"
 import { isSuggestedTarget, resolveSuggestedUnlock, type SuggestedUpdate } from "./update-analyze"
 import type { SkippedUpdate, UpdateSkipReason } from "./update-fix"
@@ -299,6 +299,15 @@ function formatEffectiveRange(request: { range: string; overrideRange?: string }
     : `${request.range} (overridden to ${request.overrideRange})`
 }
 
+function formatConflict(conflict: DependencyConflict): string {
+  const path = [...conflict.requesterPath, conflict.dependencyName].join(" > ")
+  const outcome =
+    conflict.resolvedSpec === undefined
+      ? "would not resolve"
+      : `would resolve to ${conflict.resolvedSpec}`
+  return `${path}: ${formatEffectiveRange(conflict)} ${outcome}`
+}
+
 function pushSection(lines: string[], title: string, items: (string | string[])[]): void {
   if (items.length === 0) return
 
@@ -464,7 +473,13 @@ export function formatDuplicatesReport(
         request => evaluateRequestCompatibility(request, versionInfo.version) === false,
       )
 
-      if (versionInfo.status === "cannot-dedupe" && versionInfo.displayStatus !== "manual-update") {
+      if (versionInfo.dependencyConflicts && versionInfo.displayStatus !== "manual-update") {
+        pushSection(lines, "used by", usedBy.map(formatRequest))
+        pushSection(lines, "held back by", versionInfo.dependencyConflicts.map(formatConflict))
+      } else if (
+        versionInfo.status === "cannot-dedupe" &&
+        versionInfo.displayStatus !== "manual-update"
+      ) {
         const blockedBy: typeof versionInfo.requests = []
         const alsoUsedBy: typeof versionInfo.requests = []
 

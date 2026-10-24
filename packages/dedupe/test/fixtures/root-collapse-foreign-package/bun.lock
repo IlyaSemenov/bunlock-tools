@@ -1,0 +1,24 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "example",
+      "dependencies": {
+        "app": "1.0.0",
+        "mid": "3.0.0",
+      },
+    },
+  },
+  "packages": {
+    "app": ["app@1.0.0", "", { "dependencies": { "mid": "npm:other@3.0.0", "p": "1.0.0" } }, "sha"],
+
+    "mid": ["mid@3.0.0", "", {}, "sha"],
+
+    "app/mid": ["other@3.0.0", "", {}, "sha"],
+
+    "app/p": ["p@1.0.0", "", { "dependencies": { "mid": "^1.0.0 || ^3.0.0" } }, "sha"],
+
+    "app/p/mid": ["mid@1.0.0", "", {}, "sha"],
+  },
+}

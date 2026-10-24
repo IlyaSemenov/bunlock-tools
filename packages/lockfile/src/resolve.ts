@@ -68,7 +68,7 @@ export function resolveDependencyLockKey(
 }
 
 /** Split a lock key into the package names of its nesting chain, keeping scoped names whole. */
-function splitLockKey(lockKey: string): string[] {
+export function splitLockKey(lockKey: string): string[] {
   return lockKey.match(/(?:@[^/]+\/)?[^/]+/g) ?? []
 }
 

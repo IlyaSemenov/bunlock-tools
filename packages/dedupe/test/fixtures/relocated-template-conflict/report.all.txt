@@ -1,0 +1,21 @@
+leaf:
+  ✅ 2.0.0
+    used by:
+      - example > other > mid: ^2.0.0
+  ❌ 1.0.0
+    blocked by:
+      - example: 1.0.0
+      - example > app > mid: ^1.0.0
+
+mid:
+  ✅ 2.0.0
+    used by:
+      - example > other: 2.0.0
+  ❌ 1.0.0
+    used by:
+      - example > app: *
+    held back by:
+      - example > app > mid@2.0.0 > leaf: ^2.0.0 would resolve to leaf@1.0.0
+
+2 duplicate packages in bun.lock.
+2 packages cannot be deduped.
