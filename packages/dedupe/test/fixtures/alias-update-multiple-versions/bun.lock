@@ -1,0 +1,19 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "example",
+      "dependencies": {
+        "app": "^1.0.0",
+      },
+    },
+  },
+  "packages": {
+    "app": ["app@1.0.0", "", { "dependencies": { "dbg": "npm:debug@^1.0.0", "debug": "^2.0.0" } }, "sha-app-1.0.0"],
+
+    "debug": ["debug@2.0.0", "", {}, "sha-debug-2"],
+
+    "app/dbg": ["debug@1.0.0", "", {}, "sha-debug-1"],
+  },
+}

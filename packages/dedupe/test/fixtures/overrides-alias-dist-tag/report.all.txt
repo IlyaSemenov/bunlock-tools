@@ -2,8 +2,8 @@ debug:
   ✅ 4.4.3
     used by:
       - example: npm:debug@^4.0.0
-  ❓ 4.3.3
-    used by:
+  ❌ 4.3.3
+    blocked by:
       - example > other > mid: npm:debug@latest (overridden to npm:debug@4.3.3)
 
 mid:
@@ -17,5 +17,4 @@ mid:
       - example > app > mid@2.0.0 > debug: npm:debug@latest (overridden to npm:debug@4.3.3) would resolve to debug@4.4.3
 
 2 duplicate packages in bun.lock.
-1 package cannot be deduped.
-Compatibility could not be checked automatically for 1 package.
+2 packages cannot be deduped.

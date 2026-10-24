@@ -38,4 +38,11 @@ describe("resolveDependencyLockKey", () => {
       undefined,
     )
   })
+
+  test("does not take a nested entry of another dependency with the same last name", () => {
+    const aliased = { "app/@alias/debug": [] }
+
+    expect(resolveDependencyLockKey(undefined, "debug", aliased)).toBeUndefined()
+    expect(resolveDependencyLockKey(undefined, "@alias/debug", aliased)).toBe("app/@alias/debug")
+  })
 })

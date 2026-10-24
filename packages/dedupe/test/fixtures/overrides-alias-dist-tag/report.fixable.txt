@@ -1,5 +1,4 @@
 No fixable duplicate packages found in bun.lock.
 
 2 duplicate packages in bun.lock.
-1 package cannot be deduped.
-Compatibility could not be checked automatically for 1 package.
+2 packages cannot be deduped.

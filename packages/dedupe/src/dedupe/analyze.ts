@@ -2,6 +2,7 @@ import {
   type BunLockFile,
   type BunPackageMeta,
   dependencyOverrideRange,
+  dependencyRequirement,
   effectiveDependencyRange,
   evaluateRangeCompatibility,
   isPackageEntry,
@@ -166,12 +167,16 @@ export function effectiveRequestRange(request: { range: string; overrideRange?: 
  *
  * `range` remains the package's declaration for reporting, while
  * `overrideRange` controls every compatibility and safety decision.
+ * An `npm:` alias is evaluated by the range of the package it names.
  */
 export function evaluateRequestCompatibility(
-  request: Pick<DependencyRequest, "range" | "overrideRange">,
+  request: Pick<DependencyRequest, "dependencyName" | "range" | "overrideRange">,
   targetVersion: string,
 ): boolean | undefined {
-  return evaluateRangeCompatibility(effectiveRequestRange(request), targetVersion)
+  return evaluateRangeCompatibility(
+    dependencyRequirement(request.dependencyName, effectiveRequestRange(request)).range,
+    targetVersion,
+  )
 }
 
 function workspaceNodeId(workspacePath: string): string {
@@ -540,11 +545,15 @@ function requestWillBeRemovedByRequesterRewrite(
     return true
   }
 
-  const compatibility = evaluateRangeCompatibility(
+  // An `npm:` alias of the target may name another package, which also removes the request.
+  const requirement = dependencyRequirement(
+    request.dependencyName,
     effectiveDependencyRange(context.lock, request.dependencyName, targetRange),
-    requestedVersion,
   )
-  return compatibility === false
+  if (requirement.name !== context.packagesByLockKey.get(request.resolvedLockKey)?.name) {
+    return true
+  }
+  return evaluateRangeCompatibility(requirement.range, requestedVersion) === false
 }
 
 /**
@@ -570,12 +579,14 @@ export function classifyDuplicatePackages(
     packagesByName.set(packageEntry.name, current)
   }
 
+  // Index requests by the package they resolve to: an `npm:` alias is a request for the package it names.
   const requestIndex = new Map<string, Map<string, DependencyRequest[]>>()
   for (const request of graph.requests) {
-    let byVersion = requestIndex.get(request.dependencyName)
+    const name = packagesByLockKey.get(request.resolvedLockKey)!.name
+    let byVersion = requestIndex.get(name)
     if (!byVersion) {
       byVersion = new Map()
-      requestIndex.set(request.dependencyName, byVersion)
+      requestIndex.set(name, byVersion)
     }
     const existing = byVersion.get(request.resolvedVersion)
     if (existing) {

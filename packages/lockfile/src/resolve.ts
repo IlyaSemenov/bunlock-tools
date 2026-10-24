@@ -2,16 +2,14 @@
 export type LockKeys = ReadonlyMap<string, unknown> | Readonly<Record<string, unknown>>
 
 /**
- * Tell nested dependency keys apart from root scoped package keys.
+ * Tell whether a lock key is a nested entry of a dependency: the last of several package names in the key.
  *
- * For an unscoped dependency, `@scope/name` can match the `/name` suffix even
- * though it is a root package key. A real nested key has another path segment,
- * such as `@scope/requester/name`.
+ * A suffix match is not enough: `@scope/name` is a root package key, and `app/@alias/name` is a nested entry
+ * of the dependency `@alias/name`, such as an `npm:` alias.
  */
 export function isNestedDependencyLockKey(lockKey: string, dependencyName: string): boolean {
-  if (!lockKey.endsWith(`/${dependencyName}`)) return false
-
-  return dependencyName.startsWith("@") || !/^@[^/]+\/[^/]+$/.test(lockKey)
+  const names = splitLockKey(lockKey)
+  return names.length > 1 && names.at(-1) === dependencyName
 }
 
 /**

@@ -1,6 +1,7 @@
 import {
   type BunLockFile,
   dependencyOverrideRange,
+  dependencyRequirement,
   effectiveDependencyRange,
   evaluateRangeCompatibility,
   isPackageEntry,
@@ -229,37 +230,41 @@ function candidateDedupeTargets(
     const dupGroup = duplicates.find(d => d.name === dupName)
     if (!dupGroup) return null
 
-    const declaredCandidateRange = candidateDeps[dupName]
     // Updating a requester does not bypass Bun's global override: the new
     // metadata must be evaluated against the same effective constraint.
-    const candidateRange =
-      declaredCandidateRange === undefined
-        ? undefined
-        : effectiveDependencyRange(lock, dupName, declaredCandidateRange)
-    const fromVersionInfo = dupGroup.versions.find(version =>
-      version.requests.some(request => request.requesterNodeId === requesterLockKey),
-    )
-    if (!fromVersionInfo) return null
-
-    const fromVersion = fromVersionInfo.version
-    const targetVersions = dupGroup.versions
-      .filter(version => isUpdateTarget(version, fromVersion))
-      .map(version => version.version)
-    // Dropping the dependency removes its request entirely; otherwise retain
-    // every target the candidate accepts for the later requester intersection.
-    const compatibleTargetVersions =
-      candidateRange === undefined
-        ? targetVersions
-        : targetVersions.filter(
-            targetVersion => evaluateRangeCompatibility(candidateRange, targetVersion) === true,
-          )
-    if (compatibleTargetVersions.length === 0) return null
-
-    unlocks.push({
-      name: dupName,
-      fromVersion,
-      compatibleTargetVersions,
+    // The candidate may request the package under its name or through `npm:` aliases.
+    const candidateRanges = Object.entries(candidateDeps).flatMap(([dependencyName, range]) => {
+      const requirement = dependencyRequirement(
+        dependencyName,
+        effectiveDependencyRange(lock, dependencyName, range),
+      )
+      return requirement.name === dupName ? [requirement.range] : []
     })
+    // Through `npm:` aliases, the requester may also request other versions of the package, such as the target.
+    const fromVersionInfos = dupGroup.versions.filter(
+      version =>
+        isBlockedByRequests(version) &&
+        version.requests.some(request => request.requesterNodeId === requesterLockKey),
+    )
+    if (fromVersionInfos.length === 0) return null
+
+    for (const { version: fromVersion } of fromVersionInfos) {
+      const targetVersions = dupGroup.versions
+        .filter(version => isUpdateTarget(version, fromVersion))
+        .map(version => version.version)
+      // Dropping the dependency removes its request entirely; otherwise retain
+      // every target the candidate accepts for the later requester intersection.
+      const compatibleTargetVersions = targetVersions.filter(targetVersion =>
+        candidateRanges.every(range => evaluateRangeCompatibility(range, targetVersion) === true),
+      )
+      if (compatibleTargetVersions.length === 0) return null
+
+      unlocks.push({
+        name: dupName,
+        fromVersion,
+        compatibleTargetVersions,
+      })
+    }
   }
 
   return unlocks

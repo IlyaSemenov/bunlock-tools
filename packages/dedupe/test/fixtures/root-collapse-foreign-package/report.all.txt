@@ -2,7 +2,6 @@ mid:
   ✅ 3.0.0
     used by:
       - example: 3.0.0
-      - example > app: npm:other@3.0.0
   ❌ 1.0.0
     used by:
       - example > app > p: ^1.0.0 || ^3.0.0

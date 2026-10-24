@@ -8,6 +8,7 @@ import {
   normalizeDependencyMap,
   packageEntryMeta,
   parseResolvedSpec,
+  splitLockKey,
 } from "bunlock-lockfile"
 
 import type { DuplicatePackageInfo } from "./analyze"
@@ -232,18 +233,23 @@ function pruneRedundantNestedEntries(
       const entry = packages[lockKey]
       if (!isPackageEntry(entry)) continue
 
-      const [spec] = entry
-      const parsed = parseResolvedSpec(spec)
-      if (!parsed || lockKey === parsed.name) continue
-      if (!lockKey.endsWith(`/${parsed.name}`)) continue
+      // The last name of a nested key is the dependency name, which differs from the package name for an `npm:` alias.
+      const names = splitLockKey(lockKey)
+      const dependencyName = names.at(-1)
+      if (names.length < 2 || !dependencyName) continue
 
       const childPrefix = `${lockKey}/`
       if (Object.keys(packages).some(key => key.startsWith(childPrefix))) {
         continue
       }
 
-      const requesterLockKey = lockKey.slice(0, -(parsed.name.length + 1))
-      const fallbackKey = resolveFallbackLockKey(packages, requesterLockKey, parsed.name, lockKey)
+      const requesterLockKey = names.slice(0, -1).join("/")
+      const fallbackKey = resolveFallbackLockKey(
+        packages,
+        requesterLockKey,
+        dependencyName,
+        lockKey,
+      )
       if (!fallbackKey) continue
 
       const fallbackEntry = packages[fallbackKey]
@@ -376,7 +382,12 @@ export function rewriteEntries(
     }
 
     const rewriteKey = `${parsed.name}@${parsed.version}`
-    if (lockKey !== parsed.name && rootVersions.get(parsed.name) === targetVersion) {
+    // A nested entry of the package collapses into the root entry with the target version.
+    // An `npm:` alias entry is keyed by the alias, so it is rewritten in place instead.
+    if (
+      isNestedDependencyLockKey(lockKey, parsed.name) &&
+      rootVersions.get(parsed.name) === targetVersion
+    ) {
       const prefix = `${lockKey}/`
       for (const candidateKey of Object.keys(packages)) {
         if (candidateKey === lockKey || candidateKey.startsWith(prefix)) {

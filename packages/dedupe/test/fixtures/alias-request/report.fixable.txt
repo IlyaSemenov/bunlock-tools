@@ -1,0 +1,12 @@
+debug:
+  ✅ 4.4.3
+    used by:
+      - example > lib: ^4.4.0
+  ⬆️ 4.3.7 → 4.4.3
+    used by:
+      - example: npm:debug@^4.3.0
+
+1 duplicate package in bun.lock.
+1 package can be deduped.
+
+Run with --fix to apply available dedupes.

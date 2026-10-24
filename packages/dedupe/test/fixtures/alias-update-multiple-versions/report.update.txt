@@ -1,0 +1,14 @@
+debug:
+  ✅ 2.0.0
+    used by:
+      - example > app: ^2.0.0
+  🗑️ 1.0.0
+    used by:
+      - example > app: npm:debug@^1.0.0
+    removed after:
+      - app: 1.0.0 → 1.1.0
+
+1 duplicate package in bun.lock.
+1 intermediate package can be updated to unlock deduplication.
+
+Run with --update --fix to update intermediate packages and apply dedupes.

@@ -7,7 +7,10 @@ import { analyzeDuplicatePackages, dedupeLockText } from "./plan"
 
 test("an unsupported override specifier does not fall back", () => {
   expect(
-    evaluateRequestCompatibility({ range: "^8.0.0", overrideRange: "latest" }, "8.1.0"),
+    evaluateRequestCompatibility(
+      { dependencyName: "vite", range: "^8.0.0", overrideRange: "latest" },
+      "8.1.0",
+    ),
   ).toBeUndefined()
 })
 

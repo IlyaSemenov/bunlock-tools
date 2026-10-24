@@ -1,0 +1,23 @@
+app:
+  ✅ 2.0.0
+    used by:
+      - example: 2.0.0
+  ⬆️ 1.0.0 → 2.0.0
+    used by:
+      - example > other: ^1.0.0 || ^2.0.0
+
+debug:
+  ✅ 2.0.0
+    used by:
+      - example > app: npm:debug@^2.0.0
+  🗑️ 1.0.0
+    used by:
+      - example > other > app: npm:debug@^1.0.0
+    removed after:
+      - app: 1.0.0 → 2.0.0
+
+2 duplicate packages in bun.lock.
+1 package can be deduped.
+1 package cannot be deduped.
+
+Run with --fix to apply available dedupes.

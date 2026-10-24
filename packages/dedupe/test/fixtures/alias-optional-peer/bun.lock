@@ -1,0 +1,21 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "example",
+      "dependencies": {
+        "dbg": "npm:debug@^4.3.0",
+        "debug": "^4.4.0",
+        "plugin": "1.0.0",
+      },
+    },
+  },
+  "packages": {
+    "dbg": ["debug@4.3.7", "", {}, "sha-debug-4.3.7"],
+
+    "debug": ["debug@4.4.3", "", {}, "sha-debug-4.4.3"],
+
+    "plugin": ["plugin@1.0.0", "", { "peerDependencies": { "dbg": "npm:debug@^3.0.0" }, "optionalPeers": ["dbg"] }, "sha-plugin"],
+  },
+}
