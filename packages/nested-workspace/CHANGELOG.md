@@ -1,5 +1,11 @@
 # bun-nested-workspace
 
+## 0.3.2
+
+### Patch Changes
+
+- eeb8ca6: Fix the sync failing when the host root package and the nested repository depend on different versions of the same package, such as a newer `eslint` in the host root than in the nested root.
+
 ## 0.3.1
 
 ### Patch Changes
