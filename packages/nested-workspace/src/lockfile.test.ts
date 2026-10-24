@@ -85,6 +85,45 @@ describe("applyManifestToLockfile", () => {
       patchedDependencies: { "exceljs@4.4.0": "nested/patches/exceljs@4.4.0.patch" },
     })
   })
+
+  describe("`$name` overrides", () => {
+    const lock: Lockfile = { lockfileVersion: 1, workspaces: {}, packages: {} }
+
+    test("records the range that the root declares", () => {
+      const applied = applyManifestToLockfile(lock, {
+        dependencies: { ms: "~2.1.1" },
+        optionalDependencies: { ms: "~2.1.1", constructor: "^1.0.0" },
+        overrides: { ms: "$ms", constructor: "$constructor", debug: "4.3.3" },
+      })
+
+      expect(applied.overrides).toEqual({ ms: "~2.1.1", constructor: "^1.0.0", debug: "4.3.3" })
+    })
+
+    test("rejects a reference that does not resolve to one range of the same package", () => {
+      expect(() => applyManifestToLockfile(lock, { overrides: { ms: "$ms" } })).toThrow(
+        'package.json override "ms": "$ms" refers to a dependency that the root does not declare',
+      )
+      expect(() =>
+        applyManifestToLockfile(lock, {
+          dependencies: {},
+          overrides: { constructor: "$constructor" },
+        }),
+      ).toThrow("refers to a dependency that the root does not declare")
+      expect(() =>
+        applyManifestToLockfile(lock, {
+          dependencies: { ms: "~2.1.1" },
+          peerDependencies: { ms: "^2.0.0" },
+          overrides: { ms: "$ms" },
+        }),
+      ).toThrow("refers to different ranges in the dependency groups")
+      expect(() =>
+        applyManifestToLockfile(lock, {
+          dependencies: { debug: "^4.0.0" },
+          overrides: { ms: "$debug" },
+        }),
+      ).toThrow("refers to another package")
+    })
+  })
 })
 
 describe("mergeLockfiles", () => {

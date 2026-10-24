@@ -152,18 +152,20 @@ export async function syncNestedWorkspace(
   const manifestSync = syncManifest(workspace.manifest, workspace.nestedManifest)
   const { manifest } = manifestSync
 
-  const manifestText = formatJson(manifest, workspace.manifestText)
-  if (manifestText !== workspace.manifestText) {
-    await Bun.write(path.join(root, "package.json"), manifestText)
-  }
-  options.onManifestSync?.(manifestSync)
-
+  // Merged before anything is written, so that its errors leave both files unchanged.
   // bun install then adds new dependencies of host packages and removes unused entries.
   const merged = mergeLockfiles(
     applyManifestToLockfile(workspace.lock, manifest),
     workspace.nestedLock,
     workspace.config.dir,
   )
+
+  const manifestText = formatJson(manifest, workspace.manifestText)
+  if (manifestText !== workspace.manifestText) {
+    await Bun.write(path.join(root, "package.json"), manifestText)
+  }
+  options.onManifestSync?.(manifestSync)
+
   await Bun.write(path.join(root, "bun.lock"), renderBunLock(merged))
 
   await runBunInstall(root, options.installArgs)

@@ -58,6 +58,10 @@ type Catalog = Record<string, string>
 
 /** Root `package.json` fields this package reads or rewrites; other fields are preserved as is. */
 export interface PackageManifest {
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+  optionalDependencies?: Record<string, string>
+  peerDependencies?: Record<string, string>
   workspaces?: string[] | WorkspacesConfig
   catalog?: Catalog
   catalogs?: Record<string, Catalog>
@@ -169,6 +173,52 @@ function setCatalogs(
   return result
 }
 
+/** Returns the distinct ranges that the root `package.json` declares for a package across its dependency groups. */
+function getDeclaredRanges(manifest: PackageManifest, name: string): string[] {
+  const groups = [
+    manifest.dependencies,
+    manifest.devDependencies,
+    manifest.optionalDependencies,
+    manifest.peerDependencies,
+  ]
+  return [
+    ...new Set(
+      groups.flatMap(group => (group && Object.hasOwn(group, name) ? [group[name]!] : [])),
+    ),
+  ]
+}
+
+/**
+ * Returns the range that a `$name` override value refers to, or the value itself when it is not a reference.
+ *
+ * Bun replaces `$name` with the range that the root `package.json` declares for `name`, as written.
+ * Resolves only references to the root's own declarations: throws when the reference names another package,
+ * which Bun versions resolve differently, and when the dependency groups declare no range or different ranges for it.
+ */
+export function resolveOverrideValue(
+  manifest: PackageManifest,
+  name: string,
+  value: string,
+  source = "package.json",
+): string {
+  if (!value.startsWith("$")) {
+    return value
+  }
+  const entry = `${source} override ${JSON.stringify(name)}: ${JSON.stringify(value)}`
+  if (value.slice(1) !== name) {
+    throw new Error(
+      `${entry} refers to another package, which Bun versions resolve differently; replace it with an explicit range`,
+    )
+  }
+  const ranges = getDeclaredRanges(manifest, name)
+  if (ranges.length !== 1) {
+    throw new Error(
+      `${entry} refers to ${ranges.length ? "different ranges in the dependency groups" : "a dependency that the root does not declare"}; replace it with an explicit range`,
+    )
+  }
+  return ranges[0]!
+}
+
 /** Host entry that a nested entry with the same name replaced during the sync. */
 export interface OverriddenEntry {
   /** Field path, such as `catalog`, `catalogs.testing`, or `overrides`. */
@@ -197,7 +247,8 @@ export interface ManifestSync {
  * A nested entry replaces a host entry with the same name, while the other host entries stay.
  * Entries synced earlier and dropped by the nested repository are removed.
  * Throws when the host and the nested repository patch the same package version,
- * and when either side defines `resolutions` while `overrides` are synced.
+ * when either side defines `resolutions` while `overrides` are synced,
+ * and when a synced `$name` override would refer to another range in the host root than in the nested root.
  */
 export function syncManifest(host: PackageManifest, nested: PackageManifest): ManifestSync {
   const config = readConfig(host)
@@ -256,6 +307,17 @@ export function syncManifest(host: PackageManifest, nested: PackageManifest): Ma
       if (resolutions && Object.keys(resolutions).length) {
         throw new Error(
           `${source} defines "resolutions", which Bun ignores once "overrides" is defined; move its entries to "overrides"`,
+        )
+      }
+    }
+    // The nested root dependencies stay out of the host root, so a nested `$name` override keeps its meaning
+    // only when the host root declares the same range.
+    for (const [name, value] of Object.entries(nested.overrides ?? {})) {
+      const nestedRange = resolveOverrideValue(nested, name, value, `${config.dir}/package.json`)
+      const hostRanges = getDeclaredRanges(host, name)
+      if (value.startsWith("$") && (hostRanges.length !== 1 || hostRanges[0] !== nestedRange)) {
+        throw new Error(
+          `${config.dir}/package.json override ${JSON.stringify(name)}: ${JSON.stringify(value)} refers to ${JSON.stringify(nestedRange)} in the nested root, but the host root ${hostRanges.length ? `declares ${hostRanges.map(range => JSON.stringify(range)).join(", ")}` : "does not declare it"}; replace it with an explicit range`,
         )
       }
     }

@@ -148,6 +148,26 @@ describe("syncManifest", () => {
     ).toEqual(resolutions)
   })
 
+  test("syncs a nested `$name` override only when the host root declares the same range", () => {
+    const nested: PackageManifest = {
+      dependencies: { ms: "~2.1.1" },
+      overrides: { ms: "$ms" },
+    }
+    const host = (devDependencies: Record<string, string> = {}): PackageManifest => ({
+      devDependencies,
+      ...config(),
+    })
+
+    expect(syncManifest(host({ ms: "~2.1.1" }), nested).manifest.overrides).toEqual({ ms: "$ms" })
+    expect(() => syncManifest(host({ ms: "^2.0.0" }), nested)).toThrow(
+      'nested/package.json override "ms": "$ms" refers to "~2.1.1" in the nested root, but the host root declares "^2.0.0"',
+    )
+    expect(() => syncManifest(host(), nested)).toThrow("but the host root does not declare it")
+    expect(() => syncManifest(host({ ms: "~2.1.1" }), { overrides: { ms: "$ms" } })).toThrow(
+      "refers to a dependency that the root does not declare",
+    )
+  })
+
   test("syncs patched dependencies with paths inside the nested directory", () => {
     const host: PackageManifest = {
       patchedDependencies: {

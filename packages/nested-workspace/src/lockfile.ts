@@ -17,7 +17,7 @@ import {
 
 import { getErrorMessage } from "./errors"
 import type { PackageManifest } from "./manifest"
-import { getCatalogs } from "./manifest"
+import { getCatalogs, resolveOverrideValue } from "./manifest"
 import { isNestedPath } from "./paths"
 
 /** Parsed `bun.lock` with a supported `lockfileVersion`. */
@@ -98,13 +98,22 @@ function relocateResolution(resolution: string, dir: string) {
  *
  * `bun install` re-resolves dependencies whose catalog entry, override, or patch differs from the lockfile,
  * so the merged lockfile must already record the synced root fields to keep the nested resolutions.
+ * Records `$name` overrides with the range they refer to, as Bun does, and throws when `resolveOverrideValue` does.
  */
 export function applyManifestToLockfile(lock: Lockfile, manifest: PackageManifest): Lockfile {
   const { catalog, catalogs } = getCatalogs(manifest)
+  const overrides =
+    manifest.overrides &&
+    Object.fromEntries(
+      Object.entries(manifest.overrides).map(([name, value]) => [
+        name,
+        resolveOverrideValue(manifest, name, value),
+      ]),
+    )
   const fields: Pick<BunLockFile, "catalog" | "catalogs" | "overrides" | "patchedDependencies"> = {
     catalog,
     catalogs,
-    overrides: manifest.overrides,
+    overrides,
     patchedDependencies: manifest.patchedDependencies,
   }
 

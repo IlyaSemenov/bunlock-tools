@@ -149,6 +149,22 @@ describe("sync", () => {
     )
     expect(await readJson("package.json")).not.toHaveProperty("trustedDependencies")
   })
+
+  test("fails before writing when an override refers to a dependency the root does not declare", async () => {
+    await createFixture()
+    const manifest = await readJson("package.json")
+    await writeFiles({ "package.json": { ...manifest, overrides: { "left-pad": "$left-pad" } } })
+    const lockText = await Bun.file(path.join(root, "bun.lock")).text()
+
+    const sync = runCli("--lockfile-only")
+
+    expect(sync.exitCode).toBe(1)
+    expect(sync.output).toContain(
+      'package.json override "left-pad": "$left-pad" refers to a dependency that the root does not declare',
+    )
+    expect(await readJson("package.json")).not.toHaveProperty("trustedDependencies")
+    expect(await Bun.file(path.join(root, "bun.lock")).text()).toBe(lockText)
+  })
 })
 
 describe("--check", () => {
