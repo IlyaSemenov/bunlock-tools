@@ -420,7 +420,7 @@ function collectInboundRanges(
       ...normalizeDependencyMap(meta.peerDependencies),
     }
     for (const [depName, range] of Object.entries(allDeps)) {
-      const overrideRange = dependencyOverrideRange(lock, depName)
+      const overrideRange = dependencyOverrideRange(lock, depName, range)
       const effectiveRange = effectiveDependencyRange(lock, depName, range)
       if (isNonSemverRange(effectiveRange)) continue
 
@@ -452,7 +452,7 @@ function collectInboundRanges(
       ...normalizeDependencyMap(workspace.peerDependencies),
     }
     for (const [depName, range] of Object.entries(allDeps)) {
-      const overrideRange = dependencyOverrideRange(lock, depName)
+      const overrideRange = dependencyOverrideRange(lock, depName, range)
       const effectiveRange = effectiveDependencyRange(lock, depName, range)
       if (!range || isNonSemverRange(effectiveRange)) continue
 

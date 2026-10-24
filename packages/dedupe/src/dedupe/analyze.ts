@@ -295,7 +295,7 @@ function collectDependencyGraph(
       requesterLabel: nodeLabels.get(requesterNodeId) ?? requesterNodeId,
       dependencyName,
       range,
-      overrideRange: dependencyOverrideRange(lock, dependencyName),
+      overrideRange: dependencyOverrideRange(lock, dependencyName, range),
       resolvedLockKey: resolvedNodeId,
       resolvedVersion: resolvedPackage.version,
       requestPath: [],
@@ -318,7 +318,7 @@ function collectDependencyGraph(
     }
 
     for (const [dependencyName, range] of Object.entries(workspaceDeps)) {
-      const overrideRange = dependencyOverrideRange(lock, dependencyName)
+      const overrideRange = dependencyOverrideRange(lock, dependencyName, range)
       const workspaceTargetNodeId =
         overrideRange === undefined &&
         range.startsWith("workspace:") &&

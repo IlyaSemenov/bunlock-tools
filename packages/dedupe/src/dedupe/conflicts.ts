@@ -2,6 +2,7 @@ import {
   type BunLockFile,
   type BunPackageEntry,
   dependencyOverrideRange,
+  dependencyRequirement,
   effectiveDependencyRange,
   evaluateRangeCompatibility,
   isOptionalPeerDependency,
@@ -12,7 +13,6 @@ import {
   resolveDependencyLockKey,
   splitLockKey,
 } from "bunlock-lockfile"
-import semver from "semver"
 
 import type { DependencyConflict } from "./analyze"
 import type { RewriteProvenance } from "./rewrite"
@@ -115,7 +115,7 @@ function resolveEdge(
     ...requester,
     dependencyName,
     range,
-    overrideRange: dependencyOverrideRange(lock, dependencyName),
+    overrideRange: dependencyOverrideRange(lock, dependencyName, range),
     resolvedLockKey,
     resolvedSpec: isPackageEntry(resolvedEntry) ? resolvedEntry[0] : undefined,
   }
@@ -153,23 +153,14 @@ function isConflict(lock: BunLockFile, edge: DependencyEdge): boolean {
   const resolved = parseResolvedSpec(edge.resolvedSpec)
   if (!resolved) return false
 
-  const range = effectiveDependencyRange(lock, edge.dependencyName, edge.range)
-  return (
-    resolved.name !== requiredPackageName(edge.dependencyName, range) ||
-    evaluateRangeCompatibility(range, resolved.version) === false
+  const requirement = dependencyRequirement(
+    edge.dependencyName,
+    effectiveDependencyRange(lock, edge.dependencyName, edge.range),
   )
-}
-
-/** Return the package a specifier installs: the target of an `npm:` alias, otherwise the dependency itself. */
-function requiredPackageName(dependencyName: string, range: string): string {
-  if (!range.startsWith("npm:")) return dependencyName
-
-  const target = range.slice("npm:".length)
-  // `npm:<name>@<range>` names its package even when the name also reads as a range, such as `x`.
-  const separator = target.indexOf("@", 1)
-  if (separator !== -1) return target.slice(0, separator)
-  // Without a version, `npm:^1.0.0` is a range of the dependency itself and `npm:<name>` an alias.
-  return target && !semver.validRange(target) ? target : dependencyName
+  return (
+    resolved.name !== requirement.name ||
+    evaluateRangeCompatibility(requirement.range, resolved.version) === false
+  )
 }
 
 /**

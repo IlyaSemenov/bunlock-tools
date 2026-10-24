@@ -140,6 +140,46 @@ describe("dependency mismatches", () => {
     ])
   })
 
+  test("findTransitiveMismatches does not apply a bare-name override to an npm alias", () => {
+    const aliased: Lockfile = {
+      ...nestedLock,
+      packages: {
+        ...nestedLock.packages,
+        sentry: ["sentry@1.0.0", "", { dependencies: { alias: "npm:kit@^3.0.0" } }, "sha-sentry"],
+        alias: ["kit@3.21.11", "", {}, "sha-kit-3"],
+      },
+      overrides: { alias: "4.6.1" },
+    }
+    const host: Lockfile = {
+      ...aliased,
+      packages: { ...aliased.packages, alias: ["kit@3.22.0", "", {}, "sha-kit-3-new"] },
+    }
+
+    expect(findTransitiveMismatches(host, aliased)).toEqual([
+      { path: ["@nested/web", "sentry", "alias"], expected: "kit@3.21.11", actual: "kit@3.22.0" },
+    ])
+  })
+
+  test("findTransitiveMismatches overrides an npm alias of a dist-tag by the aliased package name", () => {
+    const aliased: Lockfile = {
+      ...nestedLock,
+      packages: {
+        ...nestedLock.packages,
+        sentry: ["sentry@1.0.0", "", { dependencies: { alias: "npm:kit@latest" } }, "sha-sentry"],
+        alias: ["kit@3.21.11", "", {}, "sha-kit-3"],
+      },
+      overrides: { kit: "3.21.11" },
+    }
+    const host: Lockfile = {
+      ...aliased,
+      packages: { ...aliased.packages, alias: ["kit@3.22.0", "", {}, "sha-kit-3-new"] },
+    }
+
+    expect(findTransitiveMismatches(host, aliased)).toEqual([
+      { path: ["@nested/web", "sentry", "alias"], expected: "kit@3.21.11", actual: "kit@3.22.0" },
+    ])
+  })
+
   test("findTransitiveMismatches ignores lockfile metadata", () => {
     const withMetadata: Lockfile = {
       ...nestedLock,

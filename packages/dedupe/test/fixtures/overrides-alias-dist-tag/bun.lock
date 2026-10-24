@@ -1,0 +1,30 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "example",
+      "dependencies": {
+        "app": "1.0.0",
+        "debug": "npm:debug@^4.0.0",
+        "other": "1.0.0",
+      },
+    },
+  },
+  "overrides": {
+    "debug": "4.3.3",
+  },
+  "packages": {
+    "app": ["app@1.0.0", "", { "dependencies": { "mid": "*" } }, "sha"],
+
+    "debug": ["debug@4.4.3", "", {}, "sha"],
+
+    "other": ["other@1.0.0", "", { "dependencies": { "mid": "2.0.0" } }, "sha"],
+
+    "app/mid": ["mid@1.0.0", "", {}, "sha"],
+
+    "other/mid": ["mid@2.0.0", "", { "dependencies": { "debug": "npm:debug@latest" } }, "sha"],
+
+    "other/mid/debug": ["debug@4.3.3", "", {}, "sha"],
+  },
+}

@@ -7,6 +7,7 @@ import {
   parseLockfile,
   relocateLockfile,
   resolveDependency,
+  satisfiesSpecifier,
 } from "./lockfile"
 
 describe("parseLockfile", () => {
@@ -194,6 +195,23 @@ describe("mergeLockfiles", () => {
     expect(packages).not.toHaveProperty(["lib/kit"])
   })
 
+  test("reads a versionless npm alias that is also a valid range as a package name", () => {
+    const hostLock: Lockfile = {
+      lockfileVersion: 1,
+      workspaces: { "apps/web": { name: "@test/host", dependencies: { dep: "npm:1" } } },
+      packages: { dep: ["1@3.0.0", "", {}, "sha-1"] },
+    }
+    const nestedLock: Lockfile = {
+      lockfileVersion: 1,
+      workspaces: { "nested/apps/web": { name: "@test/nested", dependencies: { dep: "^1.0.0" } } },
+      packages: { dep: ["dep@1.0.0", "", {}, "sha-dep"] },
+    }
+
+    const { packages } = mergeLockfiles(hostLock, nestedLock, "nested")
+
+    expect(packages["@test/host/dep"]?.[0]).toBe("1@3.0.0")
+  })
+
   test("keeps an npm alias resolved to the package it names", () => {
     const hostLock: Lockfile = {
       lockfileVersion: 1,
@@ -240,6 +258,28 @@ describe("mergeLockfiles", () => {
       "nested/packages/core": { name: "@nested/core", dependencies: { kit: "^3.0.0" } },
     })
     expect(merged.packages).toEqual({ kit: ["kit@3.21.11", "", {}, "sha-kit-3"] })
+  })
+})
+
+describe("satisfiesSpecifier", () => {
+  const lock: Lockfile = { lockfileVersion: 1, workspaces: {}, packages: {} }
+
+  test("reads a version after npm: as a range of the dependency itself", () => {
+    expect(satisfiesSpecifier(lock, "dep", "npm:v1.0.0", ["dep@1.0.0", "", {}, "sha-dep"])).toBe(
+      true,
+    )
+    expect(satisfiesSpecifier(lock, "dep", "npm:1", ["dep@1.0.0", "", {}, "sha-dep"])).toBe(false)
+  })
+
+  test("checks an npm alias of a dist-tag against an override of the aliased package", () => {
+    const overridden: Lockfile = { ...lock, overrides: { kit: "npm:^3.0.0" } }
+
+    expect(
+      satisfiesSpecifier(overridden, "alias", "npm:kit@latest", ["kit@3.21.11", "", {}, "sha"]),
+    ).toBe(true)
+    expect(
+      satisfiesSpecifier(overridden, "alias", "npm:kit@latest", ["kit@4.6.1", "", {}, "sha"]),
+    ).toBe(false)
   })
 })
 

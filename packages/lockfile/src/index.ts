@@ -17,7 +17,12 @@ export {
   parseBunLock,
   parseResolvedSpec,
 } from "./parse"
-export { dependencyOverrideRange, effectiveDependencyRange } from "./overrides"
+export {
+  dependencyOverrideRange,
+  dependencyRequirement,
+  effectiveDependencyRange,
+  npmAliasTarget,
+} from "./overrides"
 export { evaluateRangeCompatibility, isResolvedDependencyReachable } from "./ranges"
 export { renderBunLock } from "./render"
 export type { LockKeys } from "./resolve"

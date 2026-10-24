@@ -43,7 +43,8 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "json5": "^2.2.3"
+    "json5": "^2.2.3",
+    "semver": "^7.7.4"
   },
   "devDependencies": {
     "@arethetypeswrong/core": "catalog:",

@@ -1,0 +1,12 @@
+mid:
+  ✅ 2.0.0
+    used by:
+      - example > other: 2.0.0
+  ⬆️ 1.0.0 → 2.0.0
+    used by:
+      - example > app: *
+
+1 duplicate package in bun.lock.
+1 package can be deduped.
+
+Run with --fix to apply available dedupes.

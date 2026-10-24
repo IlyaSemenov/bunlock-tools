@@ -7,6 +7,7 @@ import type {
   DependencyMap,
 } from "bunlock-lockfile"
 import {
+  dependencyRequirement,
   effectiveDependencyRange,
   packageEntryMeta,
   parseBunLock,
@@ -236,15 +237,8 @@ function parseRequirement(
     const range = catalog?.[dependency]
     return range === undefined ? undefined : parseRequirement(lock, dependency, range)
   }
-  if (specifier.startsWith("npm:")) {
-    // The alias target is `name@range` or a bare name; a scoped name starts with its own `@`.
-    const target = specifier.slice("npm:".length)
-    const separator = target.lastIndexOf("@")
-    return separator > 0
-      ? { name: target.slice(0, separator), range: target.slice(separator + 1) }
-      : { name: target, range: "*" }
-  }
-  return /^[a-z+]+:|\//i.test(specifier) ? undefined : { name: dependency, range: specifier }
+  const requirement = dependencyRequirement(dependency, specifier)
+  return /^[a-z+]+:|\//i.test(requirement.range) ? undefined : requirement
 }
 
 /** Returns the entry with the highest version of the required package that satisfies its range. */
