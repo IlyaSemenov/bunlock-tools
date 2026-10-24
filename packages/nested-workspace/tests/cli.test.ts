@@ -45,11 +45,11 @@ function runCli(...args: string[]) {
   return run(root, [process.execPath, cliPath, ...args])
 }
 
-/** Runs `bun install --lockfile-only` in a nested package directory, where Bun treats the nested root as the workspace root. */
-function updateNestedLockfile(env?: Record<string, string>) {
+/** Runs `bun install --lockfile-only` with extra arguments in a nested package directory, where Bun treats the nested root as the workspace root. */
+function updateNestedLockfile(args: string[] = [], env?: Record<string, string>) {
   return run(
     path.join(root, "nested/packages/core"),
-    [process.execPath, "install", "--lockfile-only"],
+    [process.execPath, "install", "--lockfile-only", ...args],
     env,
   )
 }
@@ -151,14 +151,14 @@ describe("sync", () => {
       "nested/package.json": nestedManifest,
       "nested/packages/core/package.json": { name: "@nested/core" },
     })
-    expect((await updateNestedLockfile(env)).exitCode).toBe(0)
+    expect((await updateNestedLockfile([], env)).exitCode).toBe(0)
     expect((await run(root, [process.execPath, "install", "--lockfile-only"], env)).exitCode).toBe(
       0,
     )
     await writeFiles({
       "nested/package.json": { ...nestedManifest, devDependencies: { tool: "2.0.0" } },
     })
-    expect((await updateNestedLockfile(env)).exitCode).toBe(0)
+    expect((await updateNestedLockfile([], env)).exitCode).toBe(0)
 
     const sync = await run(root, [process.execPath, cliPath], env)
 
@@ -176,12 +176,29 @@ describe("sync", () => {
       "nested/package.json": { ...nestedManifest, devDependencies: { tool: "^2.0.0" } },
     })
     await rm(path.join(root, "nested/bun.lock"))
-    expect((await updateNestedLockfile(env)).exitCode).toBe(0)
+    expect((await updateNestedLockfile([], env)).exitCode).toBe(0)
 
     const resync = await run(root, [process.execPath, cliPath], env)
 
     expect(resync.exitCode, resync.output).toBe(0)
     expect((await runTool("nested")).output.trim()).toBe("tool 2.1.0")
+  })
+
+  test("syncs a nested root entry without a name, which Bun keeps when the name is added later", async () => {
+    await createFixture()
+    const { name, ...nestedManifest } = await readJson("nested/package.json")
+    await writeFiles({ "nested/package.json": nestedManifest })
+    await rm(path.join(root, "nested/bun.lock"))
+    expect((await updateNestedLockfile()).exitCode).toBe(0)
+    await writeFiles({ "nested/package.json": { name, ...nestedManifest } })
+    expect((await updateNestedLockfile(["--frozen-lockfile"])).exitCode).toBe(0)
+    expect(await Bun.file(path.join(root, "nested/bun.lock")).text()).not.toContain(name)
+
+    const sync = await runCli("--lockfile-only")
+
+    expect(sync.exitCode, sync.output).toBe(0)
+    const check = await runCli("--check")
+    expect(check.exitCode, check.output).toBe(0)
   })
 
   test("lists host entries replaced by nested ones", async () => {

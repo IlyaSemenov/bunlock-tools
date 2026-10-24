@@ -60,6 +60,23 @@ describe("relocateLockfile", () => {
       "absolute@file:/opt/absolute",
     ])
   })
+
+  test("names the root workspace after the nested root package.json", () => {
+    const relocate = (name?: string) =>
+      relocateLockfile(
+        {
+          lockfileVersion: 1,
+          workspaces: { "": { name, devDependencies: { eslint: "^9.0.0" } } },
+          packages: {},
+        },
+        "nested",
+        "@nested/root",
+      ).workspaces
+    const expected = { nested: { name: "@nested/root", devDependencies: { eslint: "^9.0.0" } } }
+
+    expect(relocate()).toEqual(expected)
+    expect(relocate("@nested/renamed")).toEqual(expected)
+  })
 })
 
 describe("applyManifestToLockfile", () => {

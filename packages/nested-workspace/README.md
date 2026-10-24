@@ -102,6 +102,7 @@ Exclude `node_modules` and other large directories from the build context with `
   An explicit list replaces the default trusted list of Bun, so when only one side defines the field, the packages of the other side lose the default list; list the ones whose lifecycle scripts they need.
   The sync warns when it adds the field to the host.
 - `patchedDependencies` paths are rewritten through the nested directory, such as `nested/patches/exceljs@4.4.0.patch`.
+  Bun warns on every install that it ignores `patchedDependencies` of the nested root package; keep them there, because the host applies the synced copies.
 
 A nested entry replaces a host entry with the same name, while the other host entries stay.
 The sync lists the host entries it replaced.

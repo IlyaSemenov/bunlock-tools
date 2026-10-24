@@ -58,15 +58,20 @@ export async function readLockfile(file: string): Promise<Lockfile> {
 /**
  * Returns the nested lockfile with workspace and local paths relative to the host root.
  *
- * The nested root workspace moves to the nested directory, where it is a workspace of the host.
+ * The nested root workspace moves to the nested directory, where it is a workspace of the host,
+ * and takes `rootName`, the name of the nested root `package.json`, when it is given.
+ * Bun requires the name of a workspace package entry but keeps a root entry without the name
+ * when the name was added to `package.json` after the lockfile.
  */
-export function relocateLockfile(lock: Lockfile, dir: string): Lockfile {
+export function relocateLockfile(lock: Lockfile, dir: string, rootName?: string): Lockfile {
   return {
     ...lock,
     workspaces: Object.fromEntries(
       Object.entries(lock.workspaces).map(([workspacePath, workspace]) => [
         path.posix.join(dir, workspacePath),
-        workspace,
+        workspacePath === "" && rootName !== undefined
+          ? { ...workspace, name: rootName }
+          : workspace,
       ]),
     ),
     packages: Object.fromEntries(

@@ -25,7 +25,7 @@ export interface NestedWorkspace {
   manifestText: string
   nestedManifest: PackageManifest
   lock: Lockfile
-  /** Nested lockfile relocated with `relocateLockfile`. */
+  /** Nested lockfile relocated with `relocateLockfile`, with the root name of `nestedManifest`. */
   nestedLock: Lockfile
 }
 
@@ -35,17 +35,22 @@ export async function loadNestedWorkspace(root: string): Promise<NestedWorkspace
   const manifest = JSON.parse(manifestText) as PackageManifest
   const config = readConfig(manifest)
   const nestedRoot = path.join(root, config.dir)
+  const nestedManifest = (await Bun.file(
+    path.join(nestedRoot, "package.json"),
+  ).json()) as PackageManifest
 
   return {
     root,
     config,
     manifest,
     manifestText,
-    nestedManifest: (await Bun.file(
-      path.join(nestedRoot, "package.json"),
-    ).json()) as PackageManifest,
+    nestedManifest,
     lock: await readLockfile(path.join(root, "bun.lock")),
-    nestedLock: relocateLockfile(await readLockfile(path.join(nestedRoot, "bun.lock")), config.dir),
+    nestedLock: relocateLockfile(
+      await readLockfile(path.join(nestedRoot, "bun.lock")),
+      config.dir,
+      typeof nestedManifest.name === "string" ? nestedManifest.name : undefined,
+    ),
   }
 }
 
