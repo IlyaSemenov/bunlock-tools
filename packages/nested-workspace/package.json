@@ -1,6 +1,6 @@
 {
   "name": "bun-nested-workspace",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Embed a checkout of another Bun workspace repository into a Bun workspace and keep the root package.json and bun.lock in sync with it",
   "keywords": [
     "bun",

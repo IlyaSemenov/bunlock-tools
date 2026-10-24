@@ -1,5 +1,14 @@
 # bunlock-dedupe
 
+## 1.9.3
+
+### Patch Changes
+
+- 57c5a8d: Dedupe package versions required through `npm:` aliases, such as `"dbg": "npm:debug@^4.3.0"`, and list such requests under the package they name.
+- cec6acf: Report a duplicate as held back when deduping it would break other dependencies, instead of breaking them with `--fix`.
+- ded9c34: Support packages installed from git or tarball URLs that contain `@`, such as `git+ssh://git@github.com/…`.
+- d9e7384: Apply overrides to `npm:` alias dependencies, such as `"dbg": "npm:debug@^4"`, the way `bun install` does.
+
 ## 1.9.2
 
 ### Patch Changes
