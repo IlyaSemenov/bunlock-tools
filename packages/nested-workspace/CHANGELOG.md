@@ -1,5 +1,11 @@
 # bun-nested-workspace
 
+## 0.3.1
+
+### Patch Changes
+
+- abf7a76: Fix the sync breaking the host `bun.lock` when the nested `bun.lock` was created before the nested root `package.json` had a name.
+
 ## 0.3.0
 
 ### Minor Changes
