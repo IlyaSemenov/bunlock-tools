@@ -15,7 +15,7 @@ The CLI runs before the host dependencies are installed, so run it with `bunx`:
 bunx bun-nested-workspace
 ```
 
-It requires Bun 1.2.19 or later, the first version that resolves `catalog:` dependencies from both catalog locations.
+It requires Bun 1.4.4 or later, the first version that keeps a dependency of the host root package at its own version when the nested lockfile resolves the same package to another version.
 
 ## Setup
 
