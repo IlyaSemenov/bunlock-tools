@@ -113,7 +113,7 @@ A package version patched by both the host and the nested repository is an error
 ### Lockfile
 
 The nested lockfile entries replace the host entries, so the nested packages keep their versions.
-When a replaced entry no longer satisfies a dependency of a host package, the host package keeps its previous resolution as a nested lockfile entry.
+When a replaced entry no longer satisfies a dependency of a host package, the host package keeps its previous resolution, and the nested packages keep theirs.
 When neither satisfies the range, which Bun lockfiles occasionally contain, the dependency gets the highest satisfying version recorded in either lockfile.
 Ranges are checked as `bun install` applies them: an override replaces the declared range, and an `npm:` alias requires the package it names.
 `bun install` then resolves new dependencies of host packages and drops unused entries.
@@ -121,7 +121,7 @@ Ranges are checked as `bun install` applies them: an override replaces the decla
 After the install, the sync compares the direct dependencies of host packages with the original host lockfile.
 A dependency may only change to the version that the nested lockfile hoists to its top level, and only within the host range.
 Any other change means either that the host lockfile did not pin the host dependencies, for example after an edit of a host `package.json` without `bun install`, or that the lockfile cannot record the host version next to the nested one.
-The latter happens to a host workspace without a name, because Bun records workspace-specific versions under the workspace name; name the workspace or align its range with the nested version.
+The latter happens to a host workspace other than the root without a name, because Bun records workspace-specific versions under the workspace name; name the workspace or align its range with the nested version.
 
 Only `bun.lock` with `lockfileVersion` 1 or 2 is supported, because the lockfile format is internal to Bun.
 

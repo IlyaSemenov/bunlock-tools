@@ -141,7 +141,9 @@ export function applyManifestToLockfile(lock: Lockfile, manifest: PackageManifes
  * A root entry overridden by the nested lockfile might not satisfy a dependency of a host package:
  * such a dependency gets back its previous host resolution as a nested entry, so `bun install` keeps the host version
  * instead of resolving the range again.
- * A host workspace without a name cannot have nested entries, so `bun install` resolves its dependency again.
+ * A dependency of the host root package gets it back at the top level instead, as `keepHostRootResolutions` describes.
+ * A host workspace other than the root without a name cannot have nested entries,
+ * so `bun install` resolves its dependency again.
  * When the previous host resolution does not satisfy the range either, which Bun lockfiles occasionally contain,
  * the dependency gets the highest satisfying version recorded in either lockfile.
  * Catalog dependencies are checked against the catalogs of the host lockfile, so apply the synced root fields
@@ -162,11 +164,17 @@ export function mergeLockfiles(lock: Lockfile, nestedLock: Lockfile, dir: string
   const hostWorkspaces = Object.entries(lock.workspaces).filter(
     ([workspacePath]) => !isNestedPath(workspacePath, dir),
   )
+  const hostRoot = lock.workspaces[""]
+  if (hostRoot) {
+    keepHostRootResolutions(lock, nestedLock, packages)
+  }
+
   const dependents = [
-    ...hostWorkspaces.map(([, workspace]) => ({
-      key: workspace.name,
-      dependencies: getWorkspaceDependencies(workspace),
-    })),
+    ...hostWorkspaces.flatMap(([workspacePath, workspace]) =>
+      workspacePath && workspace.name
+        ? [{ key: workspace.name, dependencies: getWorkspaceDependencies(workspace) }]
+        : [],
+    ),
     ...Object.keys(packages).map(key => ({
       key,
       dependencies: getPackageDependencies(packages[key]!),
@@ -175,10 +183,6 @@ export function mergeLockfiles(lock: Lockfile, nestedLock: Lockfile, dir: string
 
   for (let index = 0; index < dependents.length; index++) {
     const { key, dependencies } = dependents[index]!
-    if (key === undefined) {
-      continue
-    }
-
     for (const [dependency, specifier] of Object.entries(dependencies)) {
       const requirement = getRequirement(lock, dependency, specifier)
       const resolved = resolveDependencyLockKey(key, dependency, packages)
@@ -206,6 +210,117 @@ export function mergeLockfiles(lock: Lockfile, nestedLock: Lockfile, dir: string
     lockfileVersion: Math.max(lock.lockfileVersion, nestedLock.lockfileVersion),
     workspaces: { ...Object.fromEntries(hostWorkspaces), ...nestedLock.workspaces },
     packages,
+  }
+}
+
+/**
+ * Gives the dependencies of the host root package back their previous host resolutions where top-level nested
+ * entries do not satisfy them.
+ *
+ * Bun resolves the dependencies of the root package at the top level only, so placing the host resolution under the
+ * root name does not pin the root dependency: the host resolution returns to the top level with its host chain instead.
+ * Then every dependency of a nested workspace or package that no longer resolves to its nested entry or a copy of it,
+ * such as one that resolved the replaced entry, gets a copy of its nested entry under the dependent,
+ * so the copied entries keep their whole nested dependency trees.
+ */
+function keepHostRootResolutions(
+  lock: Lockfile,
+  nestedLock: Lockfile,
+  packages: Lockfile["packages"],
+) {
+  const replaced = new Set<string>()
+  for (const [dependency, specifier] of Object.entries(
+    getWorkspaceDependencies(lock.workspaces[""]!),
+  )) {
+    const requirement = getRequirement(lock, dependency, specifier)
+    const nestedEntry = Object.hasOwn(nestedLock.packages, dependency)
+      ? nestedLock.packages[dependency]
+      : undefined
+    if (!requirement || !nestedEntry || satisfies(nestedEntry, requirement)) {
+      continue
+    }
+
+    const previous = Object.hasOwn(lock.packages, dependency)
+      ? lock.packages[dependency]
+      : undefined
+    const replacement =
+      previous && satisfies(previous, requirement)
+        ? previous
+        : findSatisfyingEntry([nestedLock.packages, lock.packages], requirement)
+    if (!replacement) {
+      continue
+    }
+
+    replaced.add(dependency)
+    // The nested chain under the replaced entry belongs to the nested entry, which moves under its dependents below.
+    const prefix = `${dependency}/`
+    for (const key of Object.keys(packages)) {
+      if (key.startsWith(prefix)) {
+        delete packages[key]
+      }
+    }
+    packages[dependency] = replacement
+    if (replacement === previous) {
+      for (const [key, entry] of Object.entries(lock.packages)) {
+        if (key.startsWith(prefix)) {
+          packages[key] = entry
+        }
+      }
+    }
+  }
+  if (!replaced.size) {
+    return
+  }
+
+  // Nested lockfile keys of the merged entries that come from the nested lockfile, including the ones pinned below.
+  const nestedKeys = new Map(
+    Object.keys(nestedLock.packages)
+      .filter(key => !replaced.has(splitPackageKey(key)[0]!))
+      .map(key => [key, key]),
+  )
+  // Each item pairs a dependent in the merged lockfile with its key in the nested lockfile.
+  const queue = [
+    ...Object.values(nestedLock.workspaces).flatMap(workspace =>
+      workspace.name
+        ? [
+            {
+              key: workspace.name,
+              nestedKey: workspace.name,
+              dependencies: getWorkspaceDependencies(workspace),
+            },
+          ]
+        : [],
+    ),
+    ...[...nestedKeys.keys()].map(key => ({
+      key,
+      nestedKey: key,
+      dependencies: getPackageDependencies(nestedLock.packages[key]!),
+    })),
+  ]
+  for (let index = 0; index < queue.length; index++) {
+    const { key, nestedKey, dependencies } = queue[index]!
+    for (const dependency of Object.keys(dependencies)) {
+      const expected = resolveDependencyLockKey(nestedKey, dependency, nestedLock.packages)
+      if (expected === undefined) {
+        continue
+      }
+      // Another entry of the same version may resolve its own dependencies differently, so only a copy of the
+      // nested entry, whose dependencies the queue checks, keeps the nested resolution.
+      const actual = resolveDependencyLockKey(key, dependency, packages)
+      if (actual !== undefined && nestedKeys.get(actual) === expected) {
+        continue
+      }
+
+      const entry = nestedLock.packages[expected]!
+      const pinnedKey = `${key}/${dependency}`
+      packages[pinnedKey] = entry
+      nestedKeys.set(pinnedKey, expected)
+      queue.push({
+        key: pinnedKey,
+        nestedKey: expected,
+        dependencies: getPackageDependencies(entry),
+      })
+    }
   }
 }
 

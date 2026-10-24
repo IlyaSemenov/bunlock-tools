@@ -5,6 +5,7 @@ import path from "node:path"
 
 import { parseLockfile } from "bun-nested-workspace"
 
+import type { Registry } from "./registry"
 import { startRegistry } from "./registry"
 
 const cliPath = path.join(import.meta.dir, "../src/cli.ts")
@@ -52,6 +53,30 @@ function updateNestedLockfile(args: string[] = [], env?: Record<string, string>)
     [process.execPath, "install", "--lockfile-only", ...args],
     env,
   )
+}
+
+/** Starts a registry with versions of the package `tool`, whose binary prints its version. */
+function startToolRegistry(versions: string[]) {
+  return startRegistry(
+    versions.map(version => ({
+      name: "tool",
+      version,
+      bin: { tool: "cli.js" },
+      files: { "cli.js": `console.log("tool ${version}")` },
+    })),
+  )
+}
+
+/** Returns the environment that makes `bun install` use the registry and a cache inside the fixture. */
+function getRegistryEnv(registry: Registry) {
+  return { BUN_CONFIG_REGISTRY: registry.url, BUN_INSTALL_CACHE_DIR: path.join(root, ".cache") }
+}
+
+/** Runs the `tool` binary installed for a fixture directory and returns its output. */
+async function runTool(dir: string) {
+  return (
+    await run(root, [process.execPath, path.join(root, dir, "node_modules/.bin/tool")])
+  ).output.trim()
 }
 
 /**
@@ -122,18 +147,8 @@ describe("sync", () => {
   })
 
   test("installs the dependencies of the nested root in the versions of the nested lockfile and runs its prepare script", async () => {
-    await using registry = await startRegistry(
-      ["1.0.0", "2.0.0", "2.1.0"].map(version => ({
-        name: "tool",
-        version,
-        bin: { tool: "cli.js" },
-        files: { "cli.js": `console.log("tool ${version}")` },
-      })),
-    )
-    const env = {
-      BUN_CONFIG_REGISTRY: registry.url,
-      BUN_INSTALL_CACHE_DIR: path.join(root, ".cache"),
-    }
+    await using registry = await startToolRegistry(["1.0.0", "2.0.0", "2.1.0"])
+    const env = getRegistryEnv(registry)
     const nestedManifest = {
       name: "@nested/root",
       private: true,
@@ -163,10 +178,8 @@ describe("sync", () => {
     const sync = await run(root, [process.execPath, cliPath], env)
 
     expect(sync.exitCode, sync.output).toBe(0)
-    const runTool = (dir: string) =>
-      run(root, [process.execPath, path.join(root, dir, "node_modules/.bin/tool")])
-    expect((await runTool("nested")).output.trim()).toBe("tool 2.0.0")
-    expect((await runTool(".")).output.trim()).toBe("tool 1.0.0")
+    expect(await runTool("nested")).toBe("tool 2.0.0")
+    expect(await runTool(".")).toBe("tool 1.0.0")
     expect(await Bun.file(path.join(root, "nested/prepared.txt")).exists()).toBe(true)
     const check = await runCli("--check")
     expect(check.exitCode, check.output).toBe(0)
@@ -181,7 +194,41 @@ describe("sync", () => {
     const resync = await run(root, [process.execPath, cliPath], env)
 
     expect(resync.exitCode, resync.output).toBe(0)
-    expect((await runTool("nested")).output.trim()).toBe("tool 2.1.0")
+    expect(await runTool("nested")).toBe("tool 2.1.0")
+  })
+
+  test("keeps the nested root version of a dependency that the host root resolves to a newer version", async () => {
+    await using registry = await startToolRegistry(["1.6.0", "1.8.5"])
+    const env = getRegistryEnv(registry)
+    const nestedManifest = { name: "@nested/root", private: true, workspaces: ["packages/*"] }
+    await writeFiles({
+      "package.json": {
+        name: "@host/root",
+        private: true,
+        workspaces: ["nested", "nested/packages/*"],
+        devDependencies: { tool: "^1.7.0" },
+        "bun-nested-workspace": { dir: "nested" },
+      },
+      "nested/package.json": { ...nestedManifest, devDependencies: { tool: "1.6.0" } },
+      "nested/packages/core/package.json": { name: "@nested/core" },
+    })
+    expect((await updateNestedLockfile([], env)).exitCode).toBe(0)
+    // The nested lockfile keeps 1.6.0; the host version also satisfies ^1.6.0.
+    await writeFiles({
+      "nested/package.json": { ...nestedManifest, devDependencies: { tool: "^1.6.0" } },
+    })
+    expect((await updateNestedLockfile([], env)).exitCode).toBe(0)
+    expect((await run(root, [process.execPath, "install", "--lockfile-only"], env)).exitCode).toBe(
+      0,
+    )
+
+    const sync = await run(root, [process.execPath, cliPath], env)
+
+    expect(sync.exitCode, sync.output).toBe(0)
+    expect(await runTool("nested")).toBe("tool 1.6.0")
+    expect(await runTool(".")).toBe("tool 1.8.5")
+    const check = await runCli("--check")
+    expect(check.exitCode, check.output).toBe(0)
   })
 
   test("syncs a nested root entry without a name, which Bun keeps when the name is added later", async () => {
