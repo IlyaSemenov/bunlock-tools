@@ -28,6 +28,16 @@ describe("parseLockfile", () => {
       "acme/bun.lock has lockfileVersion 3, supported versions: 1, 2",
     )
   })
+
+  test("rejects scoped overrides before the lockfileVersion", () => {
+    for (const lockfileVersion of [1, 2, 3]) {
+      const text = JSON.stringify({ lockfileVersion, overrides: { send: { ms: "2.1.1" } } })
+
+      expect(() => parseLockfile(text, "acme/bun.lock")).toThrow(
+        'acme/bun.lock: bun.lock override "send" is scoped to a parent package or a version selector; only overrides by package name are supported',
+      )
+    }
+  })
 })
 
 describe("relocateLockfile", () => {

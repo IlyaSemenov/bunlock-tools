@@ -2,6 +2,7 @@ import semver from "semver"
 
 import { dependencyRequirement, effectiveDependencyRange } from "./overrides"
 import { type BunLockFile, type BunPackageMeta, isOptionalPeerDependency } from "./parse"
+import type { OverrideRequester } from "./requester"
 
 /** Return undefined when a range or version has no supported semver interpretation. */
 export function evaluateRangeCompatibility(
@@ -43,24 +44,27 @@ export function evaluateRangeCompatibility(
  *
  * Only a known-incompatible optional peer is absent; required dependencies and
  * peers with unknown compatibility stay reachable.
+ *
+ * @param requester Package that declares the dependency, for overrides scoped to it.
  */
 export function isResolvedDependencyReachable(
   lock: Pick<BunLockFile, "overrides">,
-  requester: Pick<
+  requester: OverrideRequester | undefined,
+  metadata: Pick<
     BunPackageMeta,
     "dependencies" | "optionalDependencies" | "peerDependencies" | "optionalPeers"
   >,
   dependencyName: string,
   resolvedVersion: string,
 ): boolean {
-  if (!isOptionalPeerDependency(requester, dependencyName)) return true
+  if (!isOptionalPeerDependency(metadata, dependencyName)) return true
 
-  const range = requester.peerDependencies?.[dependencyName]
+  const range = metadata.peerDependencies?.[dependencyName]
   if (!range) return true
 
   const requirement = dependencyRequirement(
     dependencyName,
-    effectiveDependencyRange(lock, dependencyName, range),
+    effectiveDependencyRange(lock, requester, dependencyName, range),
   )
   return evaluateRangeCompatibility(requirement.range, resolvedVersion) !== false
 }

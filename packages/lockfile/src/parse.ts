@@ -1,5 +1,7 @@
 import JSON5 from "json5"
 
+import { type BunRange, isNpmRangeSpecifier, parseBunRange, trimSpecifier } from "./selector-ranges"
+
 export type DependencyMap = Record<string, string>
 
 export type BunLockWorkspace = {
@@ -8,6 +10,8 @@ export type BunLockWorkspace = {
    * context for workspace-scoped lock keys.
    */
   name?: string
+  /** Version of a workspace package; Bun leaves it out for the root workspace. */
+  version?: string
   dependencies?: DependencyMap
   devDependencies?: DependencyMap
   optionalDependencies?: DependencyMap
@@ -70,8 +74,12 @@ export type BunLockFile = {
   catalog?: DependencyMap
   /** Named catalogs of the root `package.json`. */
   catalogs?: Record<string, DependencyMap>
-  /** Canonical map Bun writes for package.json overrides and resolutions. */
-  overrides?: DependencyMap
+  /**
+   * Canonical map Bun writes for package.json overrides and resolutions.
+   *
+   * A string value overrides a package by name; an object value groups the rules scoped to a package or its range.
+   */
+  overrides?: Record<string, string | DependencyMap>
   /** Package specs whose local patches may change their dependency declarations. */
   patchedDependencies?: Record<string, string>
   packages?: Record<string, BunPackageEntry>
@@ -156,6 +164,199 @@ export class BunLockFormatError extends Error {
   }
 }
 
+/**
+ * Return the package and range that an `npm:` alias specifier installs, or `undefined` for any other specifier.
+ *
+ * Follows Bun: `npm:<name>@<version>` always names a package.
+ * Without a version, a target with a range operator or an exact version, such as `npm:^1.0.0`, `npm:1.0.0`, or
+ * `npm:v1.0.0`, is a range of the dependency itself; any other target, such as `npm:x`, `npm:1`, or `npm:1.x`, is a
+ * package name.
+ */
+export function npmAliasTarget(specifier: string): { name: string; range: string } | undefined {
+  if (!specifier.startsWith("npm:")) return undefined
+
+  const target = specifier.slice("npm:".length)
+  const separator = target.indexOf("@", 1)
+  if (separator !== -1) {
+    return { name: target.slice(0, separator), range: target.slice(separator + 1) }
+  }
+  const isRange = /[\^~><=*| ]/.test(target) || /^v?\d+\.\d+\.\d+(?:[-+][\w.+-]*)?$/i.test(target)
+  return target && !isRange ? { name: target, range: "*" } : undefined
+}
+
+/**
+ * A range in an override key, or a declared range that one is compared with, as Bun reads them.
+ *
+ * `unparsed` is a specifier that Bun may read as an npm range, but the tools cannot parse, such as `01.2.3`.
+ */
+export type SelectorRange =
+  | { kind: "semver"; range: BunRange; alias?: string }
+  | { kind: "catalog"; catalog: string }
+  | { kind: "unparsed"; alias?: string }
+
+/** Override rule that is scoped to a parent package, to a range of the target, or both. */
+export type ScopedOverride = {
+  /** The rule as written in `bun.lock`, for messages. */
+  key: string
+  parent?: { name: string; range?: BunRange; rangeText: string }
+  /** Target range as written in the key, for tie-breaks; empty without a range. */
+  targetRangeText: string
+  targetRange?: SelectorRange
+  value: string
+}
+
+/** Rules of the `bun.lock` `overrides` section. */
+export type OverrideRules = {
+  /** Overrides by package name. */
+  flat: Map<string, string>
+  /** Scoped rules by target package name. */
+  scopedByName: Map<string, ScopedOverride[]>
+}
+
+const overrideRulesCache = new WeakMap<object, OverrideRules>()
+
+/**
+ * Return the rules of the `bun.lock` `overrides` section, read once per section object.
+ *
+ * Throws `BunLockFormatError` when the section has a shape or a key that Bun does not read or the tools cannot evaluate.
+ */
+export function getOverrideRules(overrides: unknown): OverrideRules | undefined {
+  if (overrides === undefined) return undefined
+  if (!isObject(overrides) || Array.isArray(overrides)) {
+    throw new BunLockFormatError("bun.lock overrides must be an object")
+  }
+  let rules = overrideRulesCache.get(overrides)
+  if (!rules) {
+    rules = readOverrideRules(overrides)
+    overrideRulesCache.set(overrides, rules)
+  }
+  return rules
+}
+
+/**
+ * Read the rules of the `bun.lock` `overrides` section, as Bun 1.4.4 does.
+ *
+ * A string value is an override by name.
+ * An object value is a group under the key `name` or `name@range`: its `"."` child overrides that package itself,
+ * and any other child `dep` or `dep@range` overrides a dependency of it.
+ */
+function readOverrideRules(overrides: Record<string, unknown>): OverrideRules {
+  const rules: OverrideRules = { flat: new Map(), scopedByName: new Map() }
+  const addScoped = (name: string, rule: ScopedOverride) => {
+    const scoped = rules.scopedByName.get(name) ?? []
+    // Like Bun, a later rule replaces one with the same parent and ranges.
+    const index = scoped.findIndex(
+      existing =>
+        existing.parent?.name === rule.parent?.name &&
+        existing.parent?.rangeText === rule.parent?.rangeText &&
+        existing.targetRangeText === rule.targetRangeText,
+    )
+    if (index === -1) scoped.push(rule)
+    else scoped[index] = rule
+    rules.scopedByName.set(name, scoped)
+  }
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (typeof value === "string") {
+      rules.flat.set(key, value)
+      continue
+    }
+    if (!isObject(value) || Array.isArray(value)) {
+      throw new BunLockFormatError(
+        `bun.lock override ${JSON.stringify(key)} must be a string or an object of strings`,
+      )
+    }
+
+    const group = parseOverrideKey(key)
+    for (const [childKey, childValue] of Object.entries(value)) {
+      if (typeof childValue !== "string") {
+        throw new BunLockFormatError(
+          `bun.lock override ${JSON.stringify(key)} must be a string or an object of strings`,
+        )
+      }
+      if (childKey === "." && !group.range) {
+        rules.flat.set(group.name, childValue)
+        continue
+      }
+
+      const target = childKey === "." ? group : parseOverrideKey(childKey)
+      const parent = childKey === "." ? undefined : group
+      // A parent is selected by its installed version, so Bun reads only a semver range there.
+      if (
+        parent?.selector &&
+        (parent.selector.kind !== "semver" || parent.selector.alias !== undefined)
+      ) {
+        throw unsupportedKey(key)
+      }
+      addScoped(target.name, {
+        key:
+          childKey === "."
+            ? JSON.stringify(key)
+            : `${JSON.stringify(key)} > ${JSON.stringify(childKey)}`,
+        parent: parent && {
+          name: parent.name,
+          range: parent.selector?.kind === "semver" ? parent.selector.range : undefined,
+          rangeText: parent.range,
+        },
+        targetRangeText: target.range,
+        targetRange: target.selector,
+        value: childValue,
+      })
+    }
+  }
+  return rules
+}
+
+/**
+ * Split an override key into a package name and a range, as Bun's `parse_package_segment` does.
+ *
+ * `npm:` before a range is dropped, while `npm:other` and `npm:other@range` stay aliases.
+ */
+function parseOverrideKey(key: string): { name: string; range: string; selector?: SelectorRange } {
+  const separator = key.indexOf("@", 1)
+  const name = separator === -1 ? key : key.slice(0, separator)
+  let range = separator === -1 ? "" : key.slice(separator + 1)
+  if (range.startsWith("npm:")) {
+    const rest = range.slice("npm:".length)
+    if (!rest || isNpmRangeSpecifier(rest) === true) range = rest
+  }
+  if (!name || (name.startsWith("@") && !name.includes("/")) || (separator !== -1 && !range)) {
+    throw unsupportedKey(key)
+  }
+  if (!range) return { name, range }
+
+  const selector = toSelectorRange(range)
+  if (!selector || selector.kind === "unparsed") throw unsupportedKey(key)
+  return { name, range, selector }
+}
+
+function unsupportedKey(key: string): BunLockFormatError {
+  return new BunLockFormatError(
+    `bun.lock override key ${JSON.stringify(key)} is not a package name with an optional semver range`,
+  )
+}
+
+/**
+ * Read a range in an override key, or a declared range, as Bun compares them.
+ *
+ * Returns `undefined` for a specifier that no selector range matches, such as a dist-tag or a git URL.
+ */
+export function toSelectorRange(specifier: string): SelectorRange | undefined {
+  const text = trimSpecifier(specifier)
+  if (text.startsWith("catalog:")) {
+    return { kind: "catalog", catalog: text.slice("catalog:".length) }
+  }
+  const alias = npmAliasTarget(text)
+  const range = alias ? alias.range : text.startsWith("npm:") ? text.slice("npm:".length) : text
+  const isNpmRange = isNpmRangeSpecifier(range)
+  if (isNpmRange === false) return undefined
+
+  const parsed = isNpmRange && parseBunRange(range)
+  return parsed
+    ? { kind: "semver", range: parsed, alias: alias?.name }
+    : { kind: "unparsed", alias: alias?.name }
+}
+
 /** Parses `bun.lock` text and throws `BunLockFormatError` on unsupported structure. */
 export function parseBunLock(lockText: string): BunLockFile {
   const parsed = JSON5.parse(lockText)
@@ -163,21 +364,7 @@ export function parseBunLock(lockText: string): BunLockFile {
     throw new BunLockFormatError("bun.lock must parse to an object")
   }
 
-  const overrides = parsed.overrides
-  if (overrides !== undefined) {
-    if (!isObject(overrides) || Array.isArray(overrides)) {
-      throw new BunLockFormatError("bun.lock overrides must be an object")
-    }
-    // Bun writes overrides scoped to a parent package or to a version selector as objects.
-    // Their effective range depends on the requester, while dependency lookup matches overrides by name only.
-    for (const [name, value] of Object.entries(overrides)) {
-      if (typeof value !== "string") {
-        throw new BunLockFormatError(
-          `bun.lock override ${JSON.stringify(name)} is scoped to a parent package or a version selector; only overrides by package name are supported`,
-        )
-      }
-    }
-  }
+  getOverrideRules(parsed.overrides)
 
   return parsed as BunLockFile
 }

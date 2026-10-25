@@ -13,6 +13,7 @@ export {
   isOptionalPeerDependency,
   isPackageEntry,
   normalizeDependencyMap,
+  npmAliasTarget,
   packageEntryMeta,
   parseBunLock,
   parseResolvedSpec,
@@ -21,9 +22,10 @@ export {
   dependencyOverrideRange,
   dependencyRequirement,
   effectiveDependencyRange,
-  npmAliasTarget,
 } from "./overrides"
 export { evaluateRangeCompatibility, isResolvedDependencyReachable } from "./ranges"
 export { renderBunLock } from "./render"
+export type { OverrideRequester } from "./requester"
+export { packageOverrideRequester, workspaceOverrideRequester } from "./requester"
 export type { LockKeys } from "./resolve"
 export { isNestedDependencyLockKey, resolveDependencyLockKey, splitLockKey } from "./resolve"

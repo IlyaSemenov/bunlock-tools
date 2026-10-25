@@ -18,8 +18,8 @@ test("rejects structurally invalid overrides", () => {
   expect(() => parseBunLock(`{ "overrides": null }`)).toThrow(
     "bun.lock overrides must be an object",
   )
-  expect(() => parseBunLock(`{ "overrides": { "vite": {} } }`)).toThrow(
-    'bun.lock override "vite" is scoped to a parent package or a version selector',
+  expect(() => parseBunLock(`{ "overrides": { "vite": { "esbuild": {} } } }`)).toThrow(
+    'bun.lock override "vite" must be a string or an object of strings',
   )
 })
 

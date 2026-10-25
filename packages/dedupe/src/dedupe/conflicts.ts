@@ -3,18 +3,20 @@ import {
   type BunPackageEntry,
   dependencyOverrideRange,
   dependencyRequirement,
-  effectiveDependencyRange,
   evaluateRangeCompatibility,
   isOptionalPeerDependency,
   isPackageEntry,
   normalizeDependencyMap,
+  type OverrideRequester,
   packageEntryMeta,
+  packageOverrideRequester,
   parseResolvedSpec,
   resolveDependencyLockKey,
   splitLockKey,
+  workspaceOverrideRequester,
 } from "bunlock-lockfile"
 
-import type { DependencyConflict } from "./analyze"
+import { type DependencyConflict, effectiveRequestRange } from "./analyze"
 import type { RewriteProvenance } from "./rewrite"
 
 type Packages = Record<string, BunPackageEntry>
@@ -59,6 +61,8 @@ function collectDependencyEdges(
       ...normalizeDependencyMap(meta.peerDependencies),
     }
     const requesterPath = [...splitLockKey(lockKey).slice(0, -1), entry[0]]
+    // A rewritten tuple brings its own version, so overrides scoped to a parent apply by the version in this lockfile.
+    const requester = packageOverrideRequester(lock, entry[0])
 
     for (const [dependencyName, range] of Object.entries(dependencies)) {
       if (isOptionalPeerDependency(meta, dependencyName)) continue
@@ -68,6 +72,7 @@ function collectDependencyEdges(
           lock,
           packages,
           { requesterLockKey: lockKey, resolutionContext: lockKey },
+          requester,
           dependencyName,
           range,
         ),
@@ -88,10 +93,18 @@ function collectDependencyEdges(
       ...normalizeDependencyMap(workspace.peerDependencies),
     }
     const label = workspaceName ?? (workspacePath ? `workspace:${workspacePath}` : "workspace:root")
+    const requester = workspaceOverrideRequester(lock, workspacePath)
 
     for (const [dependencyName, range] of Object.entries(dependencies)) {
       edges.set(`workspace:${workspacePath}\0${dependencyName}`, {
-        ...resolveEdge(lock, packages, { resolutionContext: workspaceName }, dependencyName, range),
+        ...resolveEdge(
+          lock,
+          packages,
+          { resolutionContext: workspaceName },
+          requester,
+          dependencyName,
+          range,
+        ),
         requesterSpec: workspacePath,
         requesterPath: [label],
         optional: Object.hasOwn(optionalDependencies, dependencyName),
@@ -105,17 +118,18 @@ function collectDependencyEdges(
 function resolveEdge(
   lock: BunLockFile,
   packages: Packages,
-  requester: Pick<DependencyEdge, "requesterLockKey" | "resolutionContext">,
+  context: Pick<DependencyEdge, "requesterLockKey" | "resolutionContext">,
+  requester: OverrideRequester,
   dependencyName: string,
   range: string,
 ) {
-  const resolvedLockKey = resolveEdgeLockKey(packages, requester, dependencyName)
+  const resolvedLockKey = resolveEdgeLockKey(packages, context, dependencyName)
   const resolvedEntry = resolvedLockKey === undefined ? undefined : packages[resolvedLockKey]
   return {
-    ...requester,
+    ...context,
     dependencyName,
     range,
-    overrideRange: dependencyOverrideRange(lock, dependencyName, range),
+    overrideRange: dependencyOverrideRange(lock, requester, dependencyName, range),
     resolvedLockKey,
     resolvedSpec: isPackageEntry(resolvedEntry) ? resolvedEntry[0] : undefined,
   }
@@ -147,16 +161,13 @@ function resolveEdgeLockKey(
  *
  * Bun rejects a lockfile with an unresolved required dependency whatever its specifier.
  */
-function isConflict(lock: BunLockFile, edge: DependencyEdge): boolean {
+function isConflict(edge: DependencyEdge): boolean {
   if (edge.resolvedSpec === undefined) return !edge.optional
 
   const resolved = parseResolvedSpec(edge.resolvedSpec)
   if (!resolved) return false
 
-  const requirement = dependencyRequirement(
-    edge.dependencyName,
-    effectiveDependencyRange(lock, edge.dependencyName, edge.range),
-  )
+  const requirement = dependencyRequirement(edge.dependencyName, effectiveRequestRange(edge))
   return (
     resolved.name !== requirement.name ||
     evaluateRangeCompatibility(requirement.range, resolved.version) === false
@@ -178,14 +189,13 @@ export function findNewConflicts(
   const newConflicts: DependencyEdge[] = []
 
   for (const [id, edge] of collectDependencyEdges(lock, rewrittenPackages)) {
-    if (!isConflict(lock, edge)) continue
+    if (!isConflict(edge)) continue
 
     const original = originalEdges.get(id)
     const isKept =
       original !== undefined &&
       original.requesterSpec === edge.requesterSpec &&
-      effectiveDependencyRange(lock, original.dependencyName, original.range) ===
-        effectiveDependencyRange(lock, edge.dependencyName, edge.range) &&
+      effectiveRequestRange(original) === effectiveRequestRange(edge) &&
       original.resolvedSpec === edge.resolvedSpec
     if (!isKept) {
       newConflicts.push(edge)

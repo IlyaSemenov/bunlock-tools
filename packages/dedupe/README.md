@@ -110,8 +110,7 @@ For example, if package A requires `^3.15.2` and package B requires `^3.17.0`, b
 ## Range handling
 
 - Standard semver rules are used, including prerelease handling.
-- Bun overrides and resolutions recorded in `bun.lock` are respected.
-- Overrides scoped to a parent package or a version selector, such as `"micromatch": { "picomatch": "^2.3.2" }` or `"picomatch@^2"`, are not supported: the CLI exits with an error.
+- Bun overrides and resolutions recorded in `bun.lock` are respected, including overrides scoped to a parent package or a version range, such as `"micromatch": { "picomatch": "^2.3.2" }` or `"picomatch@^2"`.
 - Non-semver ranges such as `catalog:`, `workspace:`, `link:`, and `file:` are reported as unknown and left unchanged.
 
 ## Finding updates that unlock deduplication

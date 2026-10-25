@@ -8,9 +8,12 @@ import {
   isPackageEntry,
   isResolvedDependencyReachable,
   normalizeDependencyMap,
+  type OverrideRequester,
   packageEntryMeta,
+  packageOverrideRequester,
   parseResolvedSpec,
   resolveDependencyLockKey,
+  workspaceOverrideRequester,
 } from "bunlock-lockfile"
 import semver from "semver"
 
@@ -24,6 +27,8 @@ export type ResolvedPackage = {
   /** Real npm package name parsed from the tuple spec. */
   name: string
   version: string
+  /** The package as overrides scoped to a parent identify it. */
+  requester: OverrideRequester
   dependencies: BunPackageMeta["dependencies"]
   optionalDependencies: BunPackageMeta["optionalDependencies"]
   peerDependencies: BunPackageMeta["peerDependencies"]
@@ -45,7 +50,7 @@ export type DependencyRequest = {
   dependencyName: string
   /** Declared dependency range exactly as it appears in package metadata. */
   range: string
-  /** Global effective range from bun.lock, when present. */
+  /** Effective range from bun.lock overrides, when one replaces `range` for this requester. */
   overrideRange?: string
   /** Lock key selected by the lockfile resolver for this request. */
   resolvedLockKey: string
@@ -215,6 +220,7 @@ function collectResolvedPackages(lock: BunLockFile): Map<string, ResolvedPackage
       lockKey,
       name: parsedSpec.name,
       version: parsedSpec.version,
+      requester: packageOverrideRequester(lock, spec),
       dependencies: normalizeDependencyMap(metadata.dependencies),
       optionalDependencies: normalizeDependencyMap(metadata.optionalDependencies),
       peerDependencies: normalizeDependencyMap(metadata.peerDependencies),
@@ -284,6 +290,7 @@ function collectDependencyGraph(
 
   const addRequest = (
     requesterNodeId: string,
+    requester: OverrideRequester,
     dependencyName: string,
     range: string,
     resolvedNodeId: string,
@@ -300,7 +307,7 @@ function collectDependencyGraph(
       requesterLabel: nodeLabels.get(requesterNodeId) ?? requesterNodeId,
       dependencyName,
       range,
-      overrideRange: dependencyOverrideRange(lock, dependencyName, range),
+      overrideRange: dependencyOverrideRange(lock, requester, dependencyName, range),
       resolvedLockKey: resolvedNodeId,
       resolvedVersion: resolvedPackage.version,
       requestPath: [],
@@ -314,6 +321,7 @@ function collectDependencyGraph(
     }
 
     const workspaceName = workspace.name?.trim()
+    const requester = workspaceOverrideRequester(lock, workspacePath)
 
     const workspaceDeps = {
       ...normalizeDependencyMap(workspace.dependencies),
@@ -323,7 +331,7 @@ function collectDependencyGraph(
     }
 
     for (const [dependencyName, range] of Object.entries(workspaceDeps)) {
-      const overrideRange = dependencyOverrideRange(lock, dependencyName, range)
+      const overrideRange = dependencyOverrideRange(lock, requester, dependencyName, range)
       const workspaceTargetNodeId =
         overrideRange === undefined &&
         range.startsWith("workspace:") &&
@@ -341,7 +349,7 @@ function collectDependencyGraph(
       }
 
       addEdge(adjacency, requesterNodeId, resolvedNodeId)
-      addRequest(requesterNodeId, dependencyName, range, resolvedNodeId)
+      addRequest(requesterNodeId, requester, dependencyName, range, resolvedNodeId)
     }
   }
 
@@ -365,13 +373,25 @@ function collectDependencyGraph(
       const resolvedPackage = packagesByLockKey.get(resolvedNodeId)
       if (
         resolvedPackage &&
-        !isResolvedDependencyReachable(lock, packageEntry, dependencyName, resolvedPackage.version)
+        !isResolvedDependencyReachable(
+          lock,
+          packageEntry.requester,
+          packageEntry,
+          dependencyName,
+          resolvedPackage.version,
+        )
       ) {
         continue
       }
 
       addEdge(adjacency, packageEntry.lockKey, resolvedNodeId)
-      addRequest(packageEntry.lockKey, dependencyName, range, resolvedNodeId)
+      addRequest(
+        packageEntry.lockKey,
+        packageEntry.requester,
+        dependencyName,
+        range,
+        resolvedNodeId,
+      )
     }
   }
 
@@ -546,9 +566,15 @@ function requestWillBeRemovedByRequesterRewrite(
   }
 
   // An `npm:` alias of the target may name another package, which also removes the request.
+  // Overrides scoped to the requester apply by its target version.
   const requirement = dependencyRequirement(
     request.dependencyName,
-    effectiveDependencyRange(context.lock, request.dependencyName, targetRange),
+    effectiveDependencyRange(
+      context.lock,
+      targetRequester.requester,
+      request.dependencyName,
+      targetRange,
+    ),
   )
   if (requirement.name !== context.packagesByLockKey.get(request.resolvedLockKey)?.name) {
     return true

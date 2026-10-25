@@ -1,0 +1,31 @@
+{
+  "lockfileVersion": 3,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "example",
+      "dependencies": {
+        "app": "1.0.0",
+        "legacy": "1.0.0",
+        "shared": "^2.0.0",
+      },
+    },
+  },
+  "overrides": {
+    "app": {
+      "shared": "^2.0.0",
+    },
+    "legacy@^2": {
+      "shared": "^2.0.0",
+    },
+  },
+  "packages": {
+    "app": ["app@1.0.0", "", { "dependencies": { "shared": "^1.0.0" } }, "sha-app"],
+
+    "legacy": ["legacy@1.0.0", "", { "dependencies": { "shared": "^1.0.0" } }, "sha-legacy"],
+
+    "legacy/shared": ["shared@1.4.0", "", {}, "sha-shared-1.4.0"],
+
+    "shared": ["shared@2.1.0", "", {}, "sha-shared-2.1.0"],
+  }
+}

@@ -6,6 +6,7 @@ import {
   isGitPackageEntry,
   isPackageEntry,
   normalizeDependencyMap,
+  type OverrideRequester,
   parseBunLock,
   parseResolvedSpec,
   renderBunLock,
@@ -135,9 +136,12 @@ function collectPackageSpecs(
  *
  * Non-semver override specifiers stay authoritative, causing the safety pass
  * to reject the update conservatively instead of using the declared range.
+ *
+ * @param requester The package at its new version, for overrides scoped to it.
  */
 function requiredDependencyRanges(
   meta: PackageMetadata,
+  requester: OverrideRequester,
   lock: Pick<BunLockFile, "overrides">,
 ): Record<string, string> {
   const optionalPeers = collectOptionalPeerNames(meta)
@@ -156,7 +160,7 @@ function requiredDependencyRanges(
   return Object.fromEntries(
     Object.entries(declaredRanges).map(([name, range]) => [
       name,
-      effectiveDependencyRange(lock, name, range),
+      effectiveDependencyRange(lock, requester, name, range),
     ]),
   )
 }
@@ -178,10 +182,13 @@ function requiredDependencyRanges(
  */
 function dependencyReuseSkipReason(
   meta: PackageMetadata,
+  requester: OverrideRequester,
   specsByLockKey: Map<string, { name: string; version: string }>,
   lock: Pick<BunLockFile, "overrides">,
 ): "new-dependencies" | "unsupported-range" | undefined {
-  for (const [dependencyName, range] of Object.entries(requiredDependencyRanges(meta, lock))) {
+  for (const [dependencyName, range] of Object.entries(
+    requiredDependencyRanges(meta, requester, lock),
+  )) {
     const validRange = semver.validRange(range)
     if (!validRange) return "unsupported-range"
 
@@ -244,7 +251,12 @@ async function assessSuggestedUpdates(
       skippedUpdates.push({ ...update, skipReason: "no-integrity" })
       continue
     }
-    const reuseSkipReason = dependencyReuseSkipReason(meta, specsByLockKey, lock)
+    const reuseSkipReason = dependencyReuseSkipReason(
+      meta,
+      { name: update.packageName, version: update.toVersion },
+      specsByLockKey,
+      lock,
+    )
     if (reuseSkipReason) {
       skippedUpdates.push({ ...update, skipReason: reuseSkipReason })
       continue
@@ -323,7 +335,10 @@ function findContextConflicts(
       continue
     }
 
-    for (const [dependencyName, range] of Object.entries(requiredDependencyRanges(meta, lock))) {
+    const requester = { name: update.packageName, version: update.toVersion }
+    for (const [dependencyName, range] of Object.entries(
+      requiredDependencyRanges(meta, requester, lock),
+    )) {
       const resolvedKey = resolveDependencyLockKey(
         update.requesterLockKey,
         dependencyName,

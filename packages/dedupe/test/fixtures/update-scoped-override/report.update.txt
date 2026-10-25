@@ -1,0 +1,14 @@
+shared:
+  ✅ 2.1.0
+    used by:
+      - myapp: ^2.0.0
+  🗑️ 1.5.0
+    used by:
+      - myapp > mid: ^1.0.0 || ^2.0.0 (overridden to ^1.0.0)
+    removed after:
+      - mid: 1.0.0 → 2.0.0
+
+1 duplicate package in bun.lock.
+1 intermediate package can be updated to unlock deduplication.
+
+Run with --update --fix to update intermediate packages and apply dedupes.

@@ -8,6 +8,7 @@ import {
   isOptionalPeerDependency,
   isPackageEntry,
   packageEntryMeta,
+  packageOverrideRequester,
   parseBunLock,
   parseResolvedSpec,
   renderBunLock,
@@ -275,11 +276,12 @@ export async function repairLockText(
       ...meta.optionalDependencies,
       ...meta.peerDependencies,
     }
+    const requester = packageOverrideRequester(lock, packages[lockKey]![0])
     for (const [dependencyName, declaredRange] of Object.entries(dependencies)) {
       // Absent or incompatible optional peers are legitimate; absent optional
       // dependencies can also be platform-specific and need no installation.
       if (isOptionalPeerDependency(meta, dependencyName)) continue
-      const range = effectiveDependencyRange(lock, dependencyName, declaredRange)
+      const range = effectiveDependencyRange(lock, requester, dependencyName, declaredRange)
       const resolvedKey = resolveDependencyLockKey(lockKey, dependencyName, specs)
       const resolvedVersion = resolvedKey ? specs.get(resolvedKey)?.version : undefined
       if (!resolvedVersion && Object.hasOwn(meta.optionalDependencies ?? {}, dependencyName))

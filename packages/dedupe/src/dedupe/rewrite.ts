@@ -7,6 +7,7 @@ import {
   isResolvedDependencyReachable,
   normalizeDependencyMap,
   packageEntryMeta,
+  packageOverrideRequester,
   parseResolvedSpec,
   splitLockKey,
 } from "bunlock-lockfile"
@@ -172,7 +173,13 @@ function resolveEntryDependencyLockKey(
   const resolved = parseResolvedSpec(resolvedEntry[0])
   if (!resolved) return resolvedKey
 
-  return isResolvedDependencyReachable(lock, metadata, dependencyName, resolved.version)
+  return isResolvedDependencyReachable(
+    lock,
+    packageOverrideRequester(lock, entry[0]),
+    metadata,
+    dependencyName,
+    resolved.version,
+  )
     ? resolvedKey
     : undefined
 }

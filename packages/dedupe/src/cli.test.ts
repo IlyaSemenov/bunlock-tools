@@ -123,7 +123,7 @@ test.each([
   },
 )
 
-test("reports an unsupported scoped override without a stack trace", async () => {
+test("reports an unsupported override key without a stack trace", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "bunlock-dedupe-"))
   try {
     writeFileSync(
@@ -131,7 +131,7 @@ test("reports an unsupported scoped override without a stack trace", async () =>
       JSON.stringify({
         lockfileVersion: 3,
         workspaces: { "": { name: "app", dependencies: { "is-odd": "0.1.2" } } },
-        overrides: { "is-odd": { "is-number": "7.0.0" } },
+        overrides: { "is-odd@latest": { "is-number": "7.0.0" } },
         packages: {},
       }),
     )
@@ -140,7 +140,7 @@ test("reports an unsupported scoped override without a stack trace", async () =>
 
     expect(await proc.exited).toBe(1)
     expect(stderr).toBe(
-      'Error: bun.lock override "is-odd" is scoped to a parent package or a version selector; only overrides by package name are supported\n',
+      'Error: bun.lock override key "is-odd@latest" is not a package name with an optional semver range\n',
     )
   } finally {
     rmSync(dir, { recursive: true, force: true })

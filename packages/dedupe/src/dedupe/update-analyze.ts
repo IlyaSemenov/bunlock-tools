@@ -6,9 +6,12 @@ import {
   evaluateRangeCompatibility,
   isPackageEntry,
   normalizeDependencyMap,
+  type OverrideRequester,
   packageEntryMeta,
+  packageOverrideRequester,
   parseResolvedSpec,
   resolveDependencyLockKey,
+  workspaceOverrideRequester,
 } from "bunlock-lockfile"
 import semver from "semver"
 
@@ -204,9 +207,11 @@ function collectBlockedDuplicates(
  *
  * @param candidateMeta Registry metadata for a possible newer requester
  * version.
+ * @param candidate The requester at the candidate version, for overrides
+ * scoped to it.
  * @param blockedDuplicateNames Duplicate package names requested too narrowly
  * by the current requester.
- * @param lock Lockfile whose global overrides also apply to candidate metadata.
+ * @param lock Lockfile whose overrides also apply to candidate metadata.
  */
 function candidateDedupeTargets(
   candidateMeta: {
@@ -214,6 +219,7 @@ function candidateDedupeTargets(
     peerDependencies?: Record<string, string>
     optionalDependencies?: Record<string, string>
   },
+  candidate: OverrideRequester,
   requesterLockKey: string,
   blockedDuplicateNames: string[],
   duplicates: DuplicatePackageInfo[],
@@ -230,13 +236,13 @@ function candidateDedupeTargets(
     const dupGroup = duplicates.find(d => d.name === dupName)
     if (!dupGroup) return null
 
-    // Updating a requester does not bypass Bun's global override: the new
-    // metadata must be evaluated against the same effective constraint.
+    // Updating a requester does not bypass Bun's overrides: the new metadata must be evaluated against
+    // the effective constraints, with the rules scoped to the requester applied by the candidate version.
     // The candidate may request the package under its name or through `npm:` aliases.
     const candidateRanges = Object.entries(candidateDeps).flatMap(([dependencyName, range]) => {
       const requirement = dependencyRequirement(
         dependencyName,
-        effectiveDependencyRange(lock, dependencyName, range),
+        effectiveDependencyRange(lock, candidate, dependencyName, range),
       )
       return requirement.name === dupName ? [requirement.range] : []
     })
@@ -419,14 +425,15 @@ function collectInboundRanges(
   for (const [entryLockKey, entry] of Object.entries(lock.packages ?? {})) {
     if (!isPackageEntry(entry)) continue
     const meta = packageEntryMeta(entry) ?? {}
+    const requester = packageOverrideRequester(lock, entry[0])
     const allDeps = {
       ...normalizeDependencyMap(meta.dependencies),
       ...normalizeDependencyMap(meta.optionalDependencies),
       ...normalizeDependencyMap(meta.peerDependencies),
     }
     for (const [depName, range] of Object.entries(allDeps)) {
-      const overrideRange = dependencyOverrideRange(lock, depName, range)
-      const effectiveRange = effectiveDependencyRange(lock, depName, range)
+      const overrideRange = dependencyOverrideRange(lock, requester, depName, range)
+      const effectiveRange = effectiveDependencyRange(lock, requester, depName, range)
       if (isNonSemverRange(effectiveRange)) continue
 
       const resolvedLockKey = resolveDependencyLockKey(entryLockKey, depName, namesByLockKey)
@@ -450,6 +457,7 @@ function collectInboundRanges(
       : workspacePath
         ? `workspace:${workspacePath}`
         : "workspace:root"
+    const requester = workspaceOverrideRequester(lock, workspacePath)
     const allDeps = {
       ...normalizeDependencyMap(workspace.dependencies),
       ...normalizeDependencyMap(workspace.devDependencies),
@@ -457,8 +465,8 @@ function collectInboundRanges(
       ...normalizeDependencyMap(workspace.peerDependencies),
     }
     for (const [depName, range] of Object.entries(allDeps)) {
-      const overrideRange = dependencyOverrideRange(lock, depName, range)
-      const effectiveRange = effectiveDependencyRange(lock, depName, range)
+      const overrideRange = dependencyOverrideRange(lock, requester, depName, range)
+      const effectiveRange = effectiveDependencyRange(lock, requester, depName, range)
       if (!range || isNonSemverRange(effectiveRange)) continue
 
       const resolvedLockKey =
@@ -543,6 +551,7 @@ async function findBestCandidate(
 
     const unlocked = candidateDedupeTargets(
       meta,
+      { name: info.packageName, version: candidate },
       info.lockKey,
       info.blockedDuplicateNames,
       duplicates,

@@ -34,13 +34,24 @@ export type Lockfile = BunLockFile & {
  */
 export const supportedLockfileVersions: readonly number[] = [1, 2]
 
-/** Parses `bun.lock` text and rejects lockfile versions outside `supportedLockfileVersions`. */
+/**
+ * Parses `bun.lock` text and rejects lockfile versions outside `supportedLockfileVersions`.
+ *
+ * Also rejects overrides scoped to a parent package or a version selector, which the sync does not merge.
+ */
 export function parseLockfile(text: string, source = "bun.lock"): Lockfile {
   let lock: BunLockFile
   try {
     lock = parseBunLock(text)
   } catch (error) {
     throw new Error(`${source}: ${getErrorMessage(error)}`, { cause: error })
+  }
+  for (const [name, value] of Object.entries(lock.overrides ?? {})) {
+    if (typeof value !== "string") {
+      throw new Error(
+        `${source}: bun.lock override ${JSON.stringify(name)} is scoped to a parent package or a version selector; only overrides by package name are supported`,
+      )
+    }
   }
   if (!supportedLockfileVersions.includes(lock.lockfileVersion!)) {
     throw new Error(
@@ -356,7 +367,12 @@ function getRequirement(
   dependency: string,
   specifier: string,
 ): Requirement | undefined {
-  return parseRequirement(lock, dependency, effectiveDependencyRange(lock, dependency, specifier))
+  // `parseLockfile` rejects scoped overrides, so only overrides by name apply and the requester does not matter.
+  return parseRequirement(
+    lock,
+    dependency,
+    effectiveDependencyRange(lock, undefined, dependency, specifier),
+  )
 }
 
 /** Resolves `catalog:` specifiers and `npm:` aliases of `getRequirement`. */

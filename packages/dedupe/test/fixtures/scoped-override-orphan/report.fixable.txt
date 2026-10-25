@@ -1,0 +1,24 @@
+leaf:
+  ✅ 2.0.0
+    used by:
+      - example: ^2.0.0
+      - example > mid: ^1.0.0 (overridden to ^2.0.0)
+  🗑️ 1.0.0
+    used by:
+      - example > app > mid: ^1.0.0
+    removed after:
+      - mid: 1.0.0 → 2.0.0
+
+mid:
+  ✅ 2.0.0
+    used by:
+      - example: ^2.0.0
+  ⬆️ 1.0.0 → 2.0.0
+    used by:
+      - example > app: *
+
+2 duplicate packages in bun.lock.
+1 package can be deduped.
+1 package cannot be deduped.
+
+Run with --fix to apply available dedupes.

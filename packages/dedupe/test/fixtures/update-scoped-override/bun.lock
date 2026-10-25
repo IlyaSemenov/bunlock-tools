@@ -1,0 +1,25 @@
+{
+  "lockfileVersion": 3,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "myapp",
+      "dependencies": {
+        "mid": ">=1.0.0",
+        "shared": "^2.0.0",
+      },
+    },
+  },
+  "overrides": {
+    "mid@^1": {
+      "shared": "^1.0.0",
+    },
+  },
+  "packages": {
+    "mid": ["mid@1.0.0", "", { "dependencies": { "shared": "^1.0.0 || ^2.0.0" } }, "sha-mid-1.0.0"],
+
+    "mid/shared": ["shared@1.5.0", "", {}, "sha-shared-1.5.0"],
+
+    "shared": ["shared@2.1.0", "", {}, "sha-shared-2.1.0"],
+  }
+}
