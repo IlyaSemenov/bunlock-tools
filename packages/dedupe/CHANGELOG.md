@@ -1,5 +1,11 @@
 # bunlock-dedupe
 
+## 1.10.1
+
+### Patch Changes
+
+- a4c43bf: Explain how to change an override in `package.json` when bunlock-dedupe cannot tell whether it applies to a dependency.
+
 ## 1.10.0
 
 ### Minor Changes
