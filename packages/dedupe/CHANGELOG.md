@@ -1,5 +1,11 @@
 # bunlock-dedupe
 
+## 1.10.0
+
+### Minor Changes
+
+- 3d4f7ff: Support lockfiles with overrides scoped to a parent package or a version range, such as `"micromatch": { "picomatch": "^2.3.2" }` or `"picomatch@^2"`, instead of exiting with an error.
+
 ## 1.9.3
 
 ### Patch Changes
