@@ -47,7 +47,7 @@
     },
     "packages/nested-workspace": {
       "name": "bun-nested-workspace",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "bin": {
         "bun-nested-workspace": "./dist/cli.mjs",
       },

@@ -1,5 +1,11 @@
 # bun-nested-workspace
 
+## 0.5.1
+
+### Patch Changes
+
+- e0e7c48: `--check` no longer assumes the host files lag behind the nested checkout: they may have been synced with another revision of it.
+
 ## 0.5.0
 
 ### Minor Changes
