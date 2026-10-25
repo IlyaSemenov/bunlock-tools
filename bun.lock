@@ -14,7 +14,7 @@
     },
     "packages/dedupe": {
       "name": "bunlock-dedupe",
-      "version": "1.9.3",
+      "version": "1.10.0",
       "bin": {
         "bunlock-dedupe": "./dist/cli.mjs",
       },
