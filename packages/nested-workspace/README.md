@@ -99,7 +99,9 @@ Exclude `node_modules` and other large directories from the build context with `
 
 - `catalog` and `catalogs` each stay where the host defines them; a field the host lacks goes next to the other catalog field, or into `workspaces`.
   An array `workspaces` field becomes an object when a catalog needs it.
-- `overrides` and `trustedDependencies` are merged by package name.
+- `overrides` are merged by their keys, so a group such as `"micromatch": { "picomatch": "^2.3.2" }` replaces the host group with the same key as a whole.
+  The sync requires each `bun.lock` to be up to date with the overrides of its `package.json`.
+- `trustedDependencies` are merged by package name.
 - `resolutions` on either side is an error while `overrides` are synced: Bun ignores `resolutions` once `overrides` is defined, so move its entries to `overrides`.
 - `trustedDependencies` stays in the host `package.json`, even empty, when either side defines it.
   An explicit list replaces the default trusted list of Bun, so when only one side defines the field, the packages of the other side lose the default list; list the ones whose lifecycle scripts they need.
@@ -107,7 +109,7 @@ Exclude `node_modules` and other large directories from the build context with `
 - `patchedDependencies` paths are rewritten through the nested directory, such as `nested/patches/exceljs@4.4.0.patch`.
   Bun warns on every install that it ignores `patchedDependencies` of the nested root package; keep them there, because the host applies the synced copies.
 
-A nested entry replaces a host entry with the same name, while the other host entries stay.
+A nested entry replaces a host entry with the same key, while the other host entries stay.
 The sync lists the host entries it replaced.
 A host entry equal to the nested one stays the host's own, so it survives when the nested repository drops it.
 An entry that came from the nested repository and is no longer there is removed; for patches, these are the patches inside the nested directory.
@@ -126,7 +128,7 @@ A dependency may only change to the version that the nested lockfile hoists to i
 Any other change means either that the host lockfile did not pin the host dependencies, for example after an edit of a host `package.json` without `bun install`, or that the lockfile cannot record the host version next to the nested one.
 The latter happens to a host workspace other than the root without a name, because Bun records workspace-specific versions under the workspace name; name the workspace or align its range with the nested version.
 
-Only `bun.lock` with `lockfileVersion` 1 or 2 is supported, because the lockfile format is internal to Bun.
+Only `bun.lock` with `lockfileVersion` 1, 2, or 3 is supported, because the lockfile format is internal to Bun.
 
 ## Check
 

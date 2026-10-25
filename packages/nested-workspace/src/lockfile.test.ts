@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test"
 
+import type { BunPackageEntry } from "bunlock-lockfile"
+
 import type { Lockfile } from "./lockfile"
 import {
   applyManifestToLockfile,
+  assertOverridesRecorded,
   mergeLockfiles,
   parseLockfile,
   relocateLockfile,
@@ -17,6 +20,15 @@ describe("parseLockfile", () => {
     expect(lock.lockfileVersion).toBe(1)
   })
 
+  test("accepts overrides scoped to a parent package or a version range at every supported lockfileVersion", () => {
+    for (const lockfileVersion of [1, 2, 3]) {
+      const overrides = { send: { ms: "2.1.1" }, "debug@^2": { ".": "2.6.9" } }
+      const text = JSON.stringify({ lockfileVersion, overrides })
+
+      expect(parseLockfile(text).overrides).toEqual(overrides)
+    }
+  })
+
   test("names the file in syntax errors", () => {
     expect(() => parseLockfile(`{ "lockfileVersion": `, "acme/bun.lock")).toThrow(
       /^acme\/bun\.lock: /,
@@ -24,19 +36,9 @@ describe("parseLockfile", () => {
   })
 
   test("rejects an unknown lockfileVersion", () => {
-    expect(() => parseLockfile(`{ "lockfileVersion": 3 }`, "acme/bun.lock")).toThrow(
-      "acme/bun.lock has lockfileVersion 3, supported versions: 1, 2",
+    expect(() => parseLockfile(`{ "lockfileVersion": 4 }`, "acme/bun.lock")).toThrow(
+      "acme/bun.lock has lockfileVersion 4, supported versions: 1, 2, 3",
     )
-  })
-
-  test("rejects scoped overrides before the lockfileVersion", () => {
-    for (const lockfileVersion of [1, 2, 3]) {
-      const text = JSON.stringify({ lockfileVersion, overrides: { send: { ms: "2.1.1" } } })
-
-      expect(() => parseLockfile(text, "acme/bun.lock")).toThrow(
-        'acme/bun.lock: bun.lock override "send" is scoped to a parent package or a version selector; only overrides by package name are supported',
-      )
-    }
   })
 })
 
@@ -113,6 +115,22 @@ describe("applyManifestToLockfile", () => {
     })
   })
 
+  test("records overrides scoped to a parent package or a version range as Bun writes them", () => {
+    const applied = applyManifestToLockfile(
+      { lockfileVersion: 1, workspaces: {}, packages: {} },
+      {
+        dependencies: { ms: "~2.1.1" },
+        overrides: { send: { ms: "$ms" }, ms: "2.1.1", "debug@^2": "2.6.9" },
+      },
+    )
+
+    expect(Object.entries(applied.overrides!)).toEqual([
+      ["debug@^2", { ".": "2.6.9" }],
+      ["ms", "2.1.1"],
+      ["send", { ms: "~2.1.1" }],
+    ])
+  })
+
   describe("`$name` overrides", () => {
     const lock: Lockfile = { lockfileVersion: 1, workspaces: {}, packages: {} }
 
@@ -150,6 +168,49 @@ describe("applyManifestToLockfile", () => {
         }),
       ).toThrow("refers to another package")
     })
+  })
+})
+
+describe("assertOverridesRecorded", () => {
+  const sources = { manifest: "nested/package.json", lock: "nested/bun.lock" }
+  const lock = (overrides?: Lockfile["overrides"]): Lockfile => ({
+    lockfileVersion: 1,
+    workspaces: {},
+    packages: {},
+    overrides,
+  })
+
+  test("accepts a lockfile that records the overrides as Bun writes them", () => {
+    const manifest = {
+      dependencies: { ms: "~2.1.1" },
+      overrides: { "send>ms": "$ms", send: { debug: "2.6.9" }, "debug@^2": "2.6.9" },
+    }
+
+    expect(() =>
+      assertOverridesRecorded(
+        manifest,
+        lock({ "debug@^2": { ".": "2.6.9" }, send: { ms: "~2.1.1", debug: "2.6.9" } }),
+        sources,
+      ),
+    ).not.toThrow()
+  })
+
+  test("names the overrides that the lockfile records differently", () => {
+    const manifest = {
+      overrides: { send: { ms: "github:owner/repo#bad\nref" }, debug: "2.6.9", ms: "2.1.1" },
+    }
+
+    expect(() =>
+      assertOverridesRecorded(manifest, lock({ debug: "2.6.9", ms: "2.1.0" }), sources),
+    ).toThrow(
+      'nested/bun.lock does not record the overrides of nested/package.json as Bun reads them: "ms", "send". Either Bun skipped an override that it cannot parse, which it warns about on install, or the lockfile is outdated; fix the override and update the lockfile with bun install',
+    )
+  })
+
+  test("checks nothing without overrides in package.json, because Bun records resolutions there", () => {
+    expect(() =>
+      assertOverridesRecorded({ resolutions: { ms: "2.1.1" } }, lock({ ms: "2.1.1" }), sources),
+    ).not.toThrow()
   })
 })
 
@@ -261,6 +322,32 @@ describe("mergeLockfiles", () => {
     expect(packages).not.toHaveProperty(["lib/kit"])
   })
 
+  test("checks the dependencies of a kept host entry against the overrides scoped to its version", () => {
+    const hostLock: Lockfile = {
+      lockfileVersion: 1,
+      workspaces: { "apps/web": { name: "@test/host", dependencies: { lib: "^2.0.0" } } },
+      packages: {
+        lib: ["lib@2.0.0", "", { dependencies: { kit: "^3.0.0" } }, "sha-lib-2"],
+        kit: ["kit@4.6.1", "", {}, "sha-kit-4"],
+      },
+      overrides: { "lib@^2": { kit: "4.6.1" } },
+    }
+    const nestedLock: Lockfile = {
+      lockfileVersion: 1,
+      workspaces: { "nested/apps/web": { name: "@test/nested", dependencies: { lib: "^1.0.0" } } },
+      packages: {
+        lib: ["lib@1.0.0", "", { dependencies: { kit: "^3.0.0" } }, "sha-lib-1"],
+        kit: ["kit@3.21.11", "", {}, "sha-kit-3"],
+      },
+    }
+
+    const { packages } = mergeLockfiles(hostLock, nestedLock, "nested")
+
+    expect(packages["@test/host/lib"]?.[0]).toBe("lib@2.0.0")
+    expect(packages["@test/host/lib/kit"]?.[0]).toBe("kit@4.6.1")
+    expect(packages).not.toHaveProperty(["lib/kit"])
+  })
+
   test("reads a versionless npm alias that is also a valid range as a package name", () => {
     const hostLock: Lockfile = {
       lockfileVersion: 1,
@@ -366,6 +453,30 @@ describe("mergeLockfiles", () => {
       "sentry/kit": "kit@1.6.0",
       "sentry/kit/ms": "ms@2.1.3",
     })
+  })
+
+  test("applies an override scoped to the host root only without a parent range", () => {
+    const merge = (overrides: Lockfile["overrides"]) =>
+      mergeLockfiles(
+        {
+          lockfileVersion: 1,
+          workspaces: {
+            "": { name: "@test/root", version: "1.0.0", devDependencies: { kit: "^1.0.0" } },
+          },
+          packages: { kit: ["kit@1.0.0", "", {}, "sha-kit-1"] },
+          overrides,
+        },
+        {
+          lockfileVersion: 1,
+          workspaces: { nested: { name: "@nested/root", devDependencies: { kit: "^2.0.0" } } },
+          packages: { kit: ["kit@2.0.0", "", {}, "sha-kit-2"] },
+        },
+        "nested",
+      ).packages
+
+    // Bun gives the root package no version, so a parent range never matches it.
+    expect(merge({ "@test/root@^1": { kit: "2.0.0" } }).kit?.[0]).toBe("kit@1.0.0")
+    expect(merge({ "@test/root": { kit: "2.0.0" } }).kit?.[0]).toBe("kit@2.0.0")
   })
 
   test("keeps the nested resolutions of an entry that moves under a dependent with its own versions", () => {
@@ -525,7 +636,6 @@ describe("mergeLockfiles", () => {
 
     const merged = mergeLockfiles(hostLock, nestedLock, "nested")
 
-    expect(merged.lockfileVersion).toBe(2)
     expect(merged.workspaces).toEqual({
       "": { name: "@test/root" },
       nested: { name: "@nested/root" },
@@ -533,26 +643,55 @@ describe("mergeLockfiles", () => {
     })
     expect(merged.packages).toEqual({ kit: ["kit@3.21.11", "", {}, "sha-kit-3"] })
   })
+
+  test("writes the higher lockfileVersion unless an entry needs version 1", () => {
+    const merge = (hostVersion: number, nestedVersion: number, entry: BunPackageEntry) =>
+      mergeLockfiles(
+        { lockfileVersion: hostVersion, workspaces: {}, packages: {} },
+        { lockfileVersion: nestedVersion, workspaces: {}, packages: { kit: entry } },
+        "nested",
+      ).lockfileVersion
+    const registryEntry: BunPackageEntry = ["kit@1.0.0", "", {}, `sha512-${"A".repeat(86)}==`]
+    // Bun reads an npm package from a tarball outside the default registry without an integrity at version 1 only.
+    const tarballEntry: BunPackageEntry = ["kit@1.0.0", "https://example.com/kit-1.0.0.tgz", {}, ""]
+
+    expect(merge(1, 3, registryEntry)).toBe(3)
+    expect(merge(3, 1, registryEntry)).toBe(3)
+    expect(merge(2, 1, tarballEntry)).toBe(1)
+    expect(merge(1, 1, registryEntry)).toBe(1)
+  })
 })
 
 describe("satisfiesSpecifier", () => {
   const lock: Lockfile = { lockfileVersion: 1, workspaces: {}, packages: {} }
 
   test("reads a version after npm: as a range of the dependency itself", () => {
-    expect(satisfiesSpecifier(lock, "dep", "npm:v1.0.0", ["dep@1.0.0", "", {}, "sha-dep"])).toBe(
-      true,
-    )
-    expect(satisfiesSpecifier(lock, "dep", "npm:1", ["dep@1.0.0", "", {}, "sha-dep"])).toBe(false)
+    const entry: BunPackageEntry = ["dep@1.0.0", "", {}, "sha-dep"]
+
+    expect(satisfiesSpecifier(lock, {}, "dep", "npm:v1.0.0", entry)).toBe(true)
+    expect(satisfiesSpecifier(lock, {}, "dep", "npm:1", entry)).toBe(false)
+  })
+
+  test("checks a dependency against the overrides scoped to the package that declares it", () => {
+    const overridden: Lockfile = { ...lock, overrides: { "lib@^2": { kit: "4.6.1" } } }
+    const entry: BunPackageEntry = ["kit@3.21.11", "", {}, "sha-kit-3"]
+
+    expect(
+      satisfiesSpecifier(overridden, { name: "lib", version: "2.0.0" }, "kit", "^3.0.0", entry),
+    ).toBe(false)
+    expect(
+      satisfiesSpecifier(overridden, { name: "lib", version: "1.0.0" }, "kit", "^3.0.0", entry),
+    ).toBe(true)
   })
 
   test("checks an npm alias of a dist-tag against an override of the aliased package", () => {
     const overridden: Lockfile = { ...lock, overrides: { kit: "npm:^3.0.0" } }
 
     expect(
-      satisfiesSpecifier(overridden, "alias", "npm:kit@latest", ["kit@3.21.11", "", {}, "sha"]),
+      satisfiesSpecifier(overridden, {}, "alias", "npm:kit@latest", ["kit@3.21.11", "", {}, "sha"]),
     ).toBe(true)
     expect(
-      satisfiesSpecifier(overridden, "alias", "npm:kit@latest", ["kit@4.6.1", "", {}, "sha"]),
+      satisfiesSpecifier(overridden, {}, "alias", "npm:kit@latest", ["kit@4.6.1", "", {}, "sha"]),
     ).toBe(false)
   })
 })

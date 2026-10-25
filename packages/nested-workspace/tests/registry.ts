@@ -8,6 +8,7 @@ import path from "node:path"
 export interface RegistryPackage {
   name: string
   version: string
+  dependencies?: Record<string, string>
   bin?: Record<string, string>
   files?: Record<string, string>
 }

@@ -5,14 +5,20 @@ import type {
   BunLockWorkspace,
   BunPackageEntry,
   DependencyMap,
+  OverrideRequester,
 } from "bunlock-lockfile"
 import {
   dependencyRequirement,
   effectiveDependencyRange,
+  needsLockfileVersion1,
   packageEntryMeta,
+  packageOverrideRequester,
   parseBunLock,
   parseResolvedSpec,
+  readManifestOverrides,
+  renderLockfileOverrides,
   resolveDependencyLockKey,
+  workspaceOverrideRequester,
 } from "bunlock-lockfile"
 
 import { getErrorMessage } from "./errors"
@@ -32,26 +38,15 @@ export type Lockfile = BunLockFile & {
  *
  * The format is internal to Bun, so other versions are rejected instead of being rewritten blindly.
  */
-export const supportedLockfileVersions: readonly number[] = [1, 2]
+export const supportedLockfileVersions: readonly number[] = [1, 2, 3]
 
-/**
- * Parses `bun.lock` text and rejects lockfile versions outside `supportedLockfileVersions`.
- *
- * Also rejects overrides scoped to a parent package or a version selector, which the sync does not merge.
- */
+/** Parses `bun.lock` text and rejects lockfile versions outside `supportedLockfileVersions`. */
 export function parseLockfile(text: string, source = "bun.lock"): Lockfile {
   let lock: BunLockFile
   try {
     lock = parseBunLock(text)
   } catch (error) {
     throw new Error(`${source}: ${getErrorMessage(error)}`, { cause: error })
-  }
-  for (const [name, value] of Object.entries(lock.overrides ?? {})) {
-    if (typeof value !== "string") {
-      throw new Error(
-        `${source}: bun.lock override ${JSON.stringify(name)} is scoped to a parent package or a version selector; only overrides by package name are supported`,
-      )
-    }
   }
   if (!supportedLockfileVersions.includes(lock.lockfileVersion!)) {
     throw new Error(
@@ -115,18 +110,11 @@ function relocateResolution(resolution: string, dir: string) {
  *
  * `bun install` re-resolves dependencies whose catalog entry, override, or patch differs from the lockfile,
  * so the merged lockfile must already record the synced root fields to keep the nested resolutions.
- * Records `$name` overrides with the range they refer to, as Bun does, and throws when `resolveOverrideValue` does.
+ * Records overrides in the form that Bun writes to `bun.lock`, with `$name` values replaced by the range they refer to.
  */
 export function applyManifestToLockfile(lock: Lockfile, manifest: PackageManifest): Lockfile {
   const { catalog, catalogs } = getCatalogs(manifest)
-  const overrides =
-    manifest.overrides &&
-    Object.fromEntries(
-      Object.entries(manifest.overrides).map(([name, value]) => [
-        name,
-        resolveOverrideValue(manifest, name, value),
-      ]),
-    )
+  const overrides = manifest.overrides && toLockfileOverrides(manifest)
   const fields: Pick<BunLockFile, "catalog" | "catalogs" | "overrides" | "patchedDependencies"> = {
     catalog,
     catalogs,
@@ -146,6 +134,61 @@ export function applyManifestToLockfile(lock: Lockfile, manifest: PackageManifes
 }
 
 /**
+ * Returns the `bun.lock` `overrides` section for the overrides of a root `package.json`, as Bun writes it.
+ *
+ * Replaces `$name` values with the range they refer to, and throws when `readManifestOverrides` or `resolveOverrideValue` does.
+ */
+function toLockfileOverrides(
+  manifest: PackageManifest,
+  source = "package.json",
+): NonNullable<BunLockFile["overrides"]> {
+  return renderLockfileOverrides(
+    readManifestOverrides(
+      manifest.overrides ?? {},
+      (target, value) => resolveOverrideValue(manifest, target, value, source),
+      source,
+    ),
+  )
+}
+
+/**
+ * Throws when a lockfile does not record the `overrides` of its root `package.json` as Bun reads them.
+ *
+ * Bun skips with a warning an override whose value is not a dependency spec it can parse, such as a malformed git URL,
+ * and it resolves every dependency again when it finds such an override in the lockfile.
+ * The lockfile that Bun wrote tells which overrides it read; a difference can also mean that the lockfile is outdated.
+ * Checks nothing when `package.json` has no `overrides` field, because Bun then records `resolutions` there.
+ */
+export function assertOverridesRecorded(
+  manifest: PackageManifest,
+  lock: Lockfile,
+  sources: { manifest: string; lock: string },
+): void {
+  if (!manifest.overrides) {
+    return
+  }
+  const expected = toLockfileOverrides(manifest, sources.manifest)
+  const recorded = lock.overrides ?? {}
+  const toText = (overrides: typeof recorded, key: string) => {
+    if (!Object.hasOwn(overrides, key)) return undefined
+    const value = overrides[key]!
+    return JSON.stringify(
+      typeof value === "string"
+        ? value
+        : Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    )
+  }
+  const differences = [...new Set([...Object.keys(expected), ...Object.keys(recorded)])]
+    .filter(key => toText(expected, key) !== toText(recorded, key))
+    .sort()
+  if (differences.length) {
+    throw new Error(
+      `${sources.lock} does not record the overrides of ${sources.manifest} as Bun reads them: ${differences.map(key => JSON.stringify(key)).join(", ")}. Either Bun skipped an override that it cannot parse, which it warns about on install, or the lockfile is outdated; fix the override and update the lockfile with bun install`,
+    )
+  }
+}
+
+/**
  * Merges the host lockfile with the relocated nested lockfile.
  *
  * Nested entries override host entries, so the nested packages keep the versions of the nested lockfile.
@@ -157,8 +200,9 @@ export function applyManifestToLockfile(lock: Lockfile, manifest: PackageManifes
  * so `bun install` resolves its dependency again.
  * When the previous host resolution does not satisfy the range either, which Bun lockfiles occasionally contain,
  * the dependency gets the highest satisfying version recorded in either lockfile.
- * Catalog dependencies are checked against the catalogs of the host lockfile, so apply the synced root fields
+ * Dependencies are checked against the catalogs and overrides of the host lockfile, so apply the synced root fields
  * to it first.
+ * The result has the higher `lockfileVersion` of the two, or version 1 when it has an entry that needs that version.
  */
 export function mergeLockfiles(lock: Lockfile, nestedLock: Lockfile, dir: string): Lockfile {
   // Nested chains under packages that the nested lockfile resolves are taken from the nested lockfile only.
@@ -175,27 +219,37 @@ export function mergeLockfiles(lock: Lockfile, nestedLock: Lockfile, dir: string
   const hostWorkspaces = Object.entries(lock.workspaces).filter(
     ([workspacePath]) => !isNestedPath(workspacePath, dir),
   )
+  const workspaces = { ...Object.fromEntries(hostWorkspaces), ...nestedLock.workspaces }
   const hostRoot = lock.workspaces[""]
   if (hostRoot) {
     keepHostRootResolutions(lock, nestedLock, packages)
   }
 
+  // Each item pairs a dependent with the requester that overrides scoped to a parent package match.
+  const toPackageDependent = (key: string, entry: BunPackageEntry) => ({
+    key,
+    requester: packageOverrideRequester({ workspaces }, entry[0]),
+    dependencies: getPackageDependencies(entry),
+  })
   const dependents = [
     ...hostWorkspaces.flatMap(([workspacePath, workspace]) =>
       workspacePath && workspace.name
-        ? [{ key: workspace.name, dependencies: getWorkspaceDependencies(workspace) }]
+        ? [
+            {
+              key: workspace.name,
+              requester: workspaceOverrideRequester({ workspaces }, workspacePath),
+              dependencies: getWorkspaceDependencies(workspace),
+            },
+          ]
         : [],
     ),
-    ...Object.keys(packages).map(key => ({
-      key,
-      dependencies: getPackageDependencies(packages[key]!),
-    })),
+    ...Object.keys(packages).map(key => toPackageDependent(key, packages[key]!)),
   ]
 
   for (let index = 0; index < dependents.length; index++) {
-    const { key, dependencies } = dependents[index]!
+    const { key, requester, dependencies } = dependents[index]!
     for (const [dependency, specifier] of Object.entries(dependencies)) {
-      const requirement = getRequirement(lock, dependency, specifier)
+      const requirement = getRequirement(lock, requester, dependency, specifier)
       const resolved = resolveDependencyLockKey(key, dependency, packages)
       if (!requirement || !resolved || satisfies(packages[resolved]!, requirement)) {
         continue
@@ -212,14 +266,17 @@ export function mergeLockfiles(lock: Lockfile, nestedLock: Lockfile, dir: string
 
       const nestedKey = `${key}/${dependency}`
       packages[nestedKey] = replacement
-      dependents.push({ key: nestedKey, dependencies: getPackageDependencies(replacement) })
+      dependents.push(toPackageDependent(nestedKey, replacement))
     }
   }
 
+  const version = Math.max(lock.lockfileVersion, nestedLock.lockfileVersion)
   return {
     ...lock,
-    lockfileVersion: Math.max(lock.lockfileVersion, nestedLock.lockfileVersion),
-    workspaces: { ...Object.fromEntries(hostWorkspaces), ...nestedLock.workspaces },
+    // An entry kept from a version 1 lockfile may fail the checks of version 2, which make Bun discard the lockfile.
+    lockfileVersion:
+      version > 1 && Object.values(packages).some(needsLockfileVersion1) ? 1 : version,
+    workspaces,
     packages,
   }
 }
@@ -240,10 +297,11 @@ function keepHostRootResolutions(
   packages: Lockfile["packages"],
 ) {
   const replaced = new Set<string>()
+  const rootRequester = workspaceOverrideRequester(lock, "")
   for (const [dependency, specifier] of Object.entries(
     getWorkspaceDependencies(lock.workspaces[""]!),
   )) {
-    const requirement = getRequirement(lock, dependency, specifier)
+    const requirement = getRequirement(lock, rootRequester, dependency, specifier)
     const nestedEntry = Object.hasOwn(nestedLock.packages, dependency)
       ? nestedLock.packages[dependency]
       : undefined
@@ -359,19 +417,20 @@ interface Requirement {
 /**
  * Returns the package and version range that a dependency specifier requires.
  *
- * An override replaces the specifier, as `bun install` applies it to direct and transitive dependencies alike.
+ * An override replaces the specifier, as `bun install` applies it to direct and transitive dependencies alike;
+ * `requester` is the package that declares the dependency.
  * Returns `undefined` for specifiers that do not resolve by version, such as `workspace:` or git URLs.
  */
 function getRequirement(
   lock: Lockfile,
+  requester: OverrideRequester,
   dependency: string,
   specifier: string,
 ): Requirement | undefined {
-  // `parseLockfile` rejects scoped overrides, so only overrides by name apply and the requester does not matter.
   return parseRequirement(
     lock,
     dependency,
-    effectiveDependencyRange(lock, undefined, dependency, specifier),
+    effectiveDependencyRange(lock, requester, dependency, specifier),
   )
 }
 
@@ -420,17 +479,18 @@ function satisfies(entry: BunPackageEntry, requirement: Requirement) {
 }
 
 /**
- * Returns whether a lockfile entry satisfies the specifier of a dependency on it.
+ * Returns whether a lockfile entry satisfies the specifier of a dependency on it, declared by `requester`.
  *
  * Specifiers that do not resolve by version, such as `workspace:` or git URLs, are always satisfied.
  */
 export function satisfiesSpecifier(
   lock: Lockfile,
+  requester: OverrideRequester,
   dependency: string,
   specifier: string,
   entry: BunPackageEntry,
 ): boolean {
-  const requirement = getRequirement(lock, dependency, specifier)
+  const requirement = getRequirement(lock, requester, dependency, specifier)
   return requirement === undefined || satisfies(entry, requirement)
 }
 

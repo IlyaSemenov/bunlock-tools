@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 
-import { BunLockFormatError, npmAliasTarget, parseBunLock, parseResolvedSpec } from "./parse"
+import {
+  BunLockFormatError,
+  needsLockfileVersion1,
+  npmAliasTarget,
+  parseBunLock,
+  parseResolvedSpec,
+} from "./parse"
 
 describe("parseResolvedSpec", () => {
   test("splits registry specs, including scoped names", () => {
@@ -40,6 +46,38 @@ describe("parseResolvedSpec", () => {
     expect(parseResolvedSpec("ms")).toBeNull()
     expect(parseResolvedSpec("ms@")).toBeNull()
     expect(parseResolvedSpec("@types/ms")).toBeNull()
+  })
+})
+
+describe("needsLockfileVersion1", () => {
+  const integrity = `sha512-${"A".repeat(86)}==`
+
+  test("accepts at later versions an npm package with a supported integrity or from the default registry, and a workspace", () => {
+    expect(needsLockfileVersion1(["ms@2.1.3", "", {}, integrity])).toBe(false)
+    expect(needsLockfileVersion1(["ms@2.1.3", "", {}, ""])).toBe(false)
+    expect(
+      needsLockfileVersion1(["ms@2.1.3", "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz", {}, ""]),
+    ).toBe(false)
+    expect(
+      needsLockfileVersion1(["ms@2.1.3", "https://example.com/ms-2.1.3.tgz", {}, integrity]),
+    ).toBe(false)
+    expect(needsLockfileVersion1(["w@workspace:packages/w"])).toBe(false)
+  })
+
+  test("requires version 1 for an unsupported integrity, and for a tarball outside the default registry without an integrity", () => {
+    expect(needsLockfileVersion1(["ms@2.1.3", "", {}, "md5-abc"])).toBe(true)
+    expect(needsLockfileVersion1(["ms@2.1.3", "https://example.com/ms-2.1.3.tgz", {}, ""])).toBe(
+      true,
+    )
+    expect(
+      needsLockfileVersion1(["ms@2.1.3", "https://registry.npmjs.org.example.com/ms.tgz", {}, ""]),
+    ).toBe(true)
+  })
+
+  test("requires version 1 for an unsafe checkout tag of a git package, but not of a GitHub package, which Bun rejects at every version", () => {
+    expect(needsLockfileVersion1(["x@git+https://example.com/x.git#abc", {}, "x-abc"])).toBe(false)
+    expect(needsLockfileVersion1(["x@git+https://example.com/x.git#abc", {}, "../x"])).toBe(true)
+    expect(needsLockfileVersion1(["x@github:owner/x#abc", {}, "../x"])).toBe(false)
   })
 })
 

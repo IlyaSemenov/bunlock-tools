@@ -11,6 +11,7 @@ import {
 import type { OverrideRequester } from "./requester"
 import {
   isNpmRangeSpecifier,
+  parseBunRange,
   rangeIncludes,
   rangesIntersect,
   trimSpecifier,
@@ -192,4 +193,13 @@ export function effectiveDependencyRange(
 ): string {
   const overrideRange = dependencyOverrideRange(lock, requester, dependencyName, declaredRange)
   return overrideRange === undefined ? declaredRange : overrideRange
+}
+
+/**
+ * Tell whether the range of an override parent selector `parent@range` selects a package version, as Bun 1.4.4 matches it,
+ * or `undefined` when the tools cannot tell.
+ */
+export function overrideParentRangeIncludes(range: string, version: string): boolean | undefined {
+  const parsed = parseBunRange(range)
+  return parsed && rangeIncludes(parsed, version)
 }

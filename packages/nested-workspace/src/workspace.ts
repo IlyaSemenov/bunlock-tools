@@ -14,7 +14,13 @@ import {
 } from "./check"
 import { getErrorMessage } from "./errors"
 import type { Lockfile } from "./lockfile"
-import { applyManifestToLockfile, mergeLockfiles, readLockfile, relocateLockfile } from "./lockfile"
+import {
+  applyManifestToLockfile,
+  assertOverridesRecorded,
+  mergeLockfiles,
+  readLockfile,
+  relocateLockfile,
+} from "./lockfile"
 import type { ManifestDifference, ManifestSync, PackageManifest, ResolvedConfig } from "./manifest"
 import { diffManifests, readConfig, syncManifest } from "./manifest"
 import { isNestedPath } from "./paths"
@@ -221,6 +227,18 @@ export async function syncNestedWorkspace(
   assertWorkspacesCovered(workspace)
   const manifestSync = syncManifest(workspace.manifest, workspace.nestedManifest)
   const { manifest } = manifestSync
+  // The merged lockfile records the overrides of both sides, and Bun discards a lockfile with an override it skips.
+  const { dir, fields } = workspace.config
+  assertOverridesRecorded(workspace.manifest, workspace.lock, {
+    manifest: "package.json",
+    lock: "bun.lock",
+  })
+  if (fields.includes("overrides")) {
+    assertOverridesRecorded(workspace.nestedManifest, workspace.nestedLock, {
+      manifest: `${dir}/package.json`,
+      lock: `${dir}/bun.lock`,
+    })
+  }
 
   // Merged before anything is written, so that its errors leave both files unchanged.
   // bun install then adds new dependencies of host packages and removes unused entries.

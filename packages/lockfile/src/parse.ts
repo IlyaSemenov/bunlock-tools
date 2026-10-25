@@ -97,6 +97,67 @@ export function isGitPackageEntry(entry: BunPackageEntry): entry is BunGitPackag
   return isObject(entry[1])
 }
 
+/**
+ * Return whether a package entry needs `lockfileVersion` 1, because Bun 1.4.4 rejects it in a lockfile of a later version.
+ *
+ * Version 2 adds checks on reading: an npm integrity is a hash that Bun supports or empty,
+ * an npm package from a tarball outside the default registry has a supported integrity,
+ * and the checkout tag of a git package is a single safe path component.
+ * Bun writes version 1 when an entry fails them, and discards a lockfile of a later version that has such an entry.
+ * An entry that Bun rejects at every version, such as a GitHub package with an unsafe tag, does not need version 1.
+ */
+export function needsLockfileVersion1(entry: BunPackageEntry): boolean {
+  if (isGitPackageEntry(entry)) {
+    const tag = entry[2]
+    // Bun checks the tag of a GitHub package at every version, so only other git sources depend on the version.
+    const isGit = parseResolvedSpec(entry[0])?.version.startsWith("git+") ?? false
+    return isGit && tag !== undefined && !isSafeGitTag(tag)
+  }
+  const [, url = "", , integrity = ""] = entry
+  if (isSupportedIntegrity(integrity)) return false
+  // Bun writes an empty URL for a tarball from the default registry, and when choosing the version to write it accepts
+  // only URLs under that registry, whatever the configuration.
+  return Boolean(integrity) || (Boolean(url) && !isUnderDefaultRegistry(url))
+}
+
+const defaultRegistry = "https://registry.npmjs.org"
+
+function isUnderDefaultRegistry(url: string): boolean {
+  return (
+    url.startsWith(defaultRegistry) &&
+    (url.length === defaultRegistry.length || url[defaultRegistry.length] === "/")
+  )
+}
+
+const digestLengths: Record<string, number> = { sha1: 20, sha256: 32, sha384: 48, sha512: 64 }
+
+/** Return whether an integrity has a hash that Bun supports, as Bun's `Integrity::parse` reads it. */
+function isSupportedIntegrity(integrity: string): boolean {
+  return integrity.split(/\s/).some(hash => {
+    const separator = hash.slice(0, 7).indexOf("-")
+    if (hash.length < "sha256-".length || separator === -1 || hash.length <= separator + 1)
+      return false
+    const digestLength = digestLengths[hash.slice(0, separator)]
+    const encoded = hash
+      .slice(separator + 1)
+      .split("?")[0]!
+      .replace(/=+$/, "")
+    return (
+      digestLength !== undefined &&
+      /^[A-Za-z0-9+/]*$/.test(encoded) &&
+      encoded.length % 4 !== 1 &&
+      Math.floor((encoded.length * 3) / 4) <= digestLength
+    )
+  })
+}
+
+/** Return whether a git checkout tag is a single safe path component, as Bun's `is_safe_resolved_tag` checks it. */
+function isSafeGitTag(tag: string): boolean {
+  return (
+    tag.length <= 256 && tag !== "." && tag !== ".." && /^[A-Za-z0-9_.][A-Za-z0-9_.-]*$/.test(tag)
+  )
+}
+
 export function packageEntryMeta(entry: BunPackageEntry): BunPackageMeta | undefined {
   if (isGitPackageEntry(entry)) return entry[1]
 
@@ -281,13 +342,7 @@ function readOverrideRules(overrides: Record<string, unknown>): OverrideRules {
 
       const target = childKey === "." ? group : parseOverrideKey(childKey)
       const parent = childKey === "." ? undefined : group
-      // A parent is selected by its installed version, so Bun reads only a semver range there.
-      if (
-        parent?.selector &&
-        (parent.selector.kind !== "semver" || parent.selector.alias !== undefined)
-      ) {
-        throw unsupportedKey(key)
-      }
+      if (parent && !isParentSegment(parent)) throw unsupportedKey(key)
       addScoped(target.name, {
         key:
           childKey === "."
@@ -307,27 +362,49 @@ function readOverrideRules(overrides: Record<string, unknown>): OverrideRules {
   return rules
 }
 
+/** Package name with an optional range, as an override key selects a package. */
+export type OverrideSegment = {
+  name: string
+  /** Range as Bun records it, without an `npm:` prefix before a range; empty without a range. */
+  range: string
+  selector?: SelectorRange
+}
+
 /**
- * Split an override key into a package name and a range, as Bun's `parse_package_segment` does.
+ * Split an override key segment into a package name and a range, as Bun's `parse_package_segment` does.
  *
  * `npm:` before a range is dropped, while `npm:other` and `npm:other@range` stay aliases.
+ * Returns `undefined` for a segment that Bun rejects and for a range other than a semver range or a catalog,
+ * which the tools cannot evaluate.
  */
-function parseOverrideKey(key: string): { name: string; range: string; selector?: SelectorRange } {
-  const separator = key.indexOf("@", 1)
-  const name = separator === -1 ? key : key.slice(0, separator)
-  let range = separator === -1 ? "" : key.slice(separator + 1)
+export function parseOverrideSegment(segment: string): OverrideSegment | undefined {
+  const separator = segment.indexOf("@", 1)
+  const name = separator === -1 ? segment : segment.slice(0, separator)
+  let range = separator === -1 ? "" : segment.slice(separator + 1)
   if (range.startsWith("npm:")) {
     const rest = range.slice("npm:".length)
     if (!rest || isNpmRangeSpecifier(rest) === true) range = rest
   }
   if (!name || (name.startsWith("@") && !name.includes("/")) || (separator !== -1 && !range)) {
-    throw unsupportedKey(key)
+    return undefined
   }
   if (!range) return { name, range }
 
   const selector = toSelectorRange(range)
-  if (!selector || selector.kind === "unparsed") throw unsupportedKey(key)
+  if (!selector || selector.kind === "unparsed") return undefined
   return { name, range, selector }
+}
+
+/** Return whether a parent segment has no range or a range that Bun matches against the installed version. */
+export function isParentSegment({ selector }: OverrideSegment): boolean {
+  // A parent is selected by its installed version, so Bun reads only a semver range there.
+  return !selector || (selector.kind === "semver" && selector.alias === undefined)
+}
+
+function parseOverrideKey(key: string): OverrideSegment {
+  const segment = parseOverrideSegment(key)
+  if (!segment) throw unsupportedKey(key)
+  return segment
 }
 
 function unsupportedKey(key: string): BunLockFormatError {

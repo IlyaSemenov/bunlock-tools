@@ -133,6 +133,74 @@ describe("syncManifest", () => {
     })
   })
 
+  test("syncs overrides scoped to a parent package or a version range by their top-level key", () => {
+    const host: PackageManifest = {
+      overrides: { micromatch: { picomatch: "^2.3.1" }, "debug@^2": "2.6.9" },
+      ...config(),
+    }
+    const nested: PackageManifest = {
+      overrides: { micromatch: { braces: "3.0.3" }, "send>ms": "2.1.1" },
+    }
+
+    const { manifest, overridden } = syncManifest(host, nested)
+
+    expect(manifest.overrides).toEqual({
+      "debug@^2": "2.6.9",
+      micromatch: { braces: "3.0.3" },
+      "send>ms": "2.1.1",
+    })
+    expect(overridden).toEqual([
+      {
+        field: "overrides",
+        name: "micromatch",
+        hostValue: { picomatch: "^2.3.1" },
+        nestedValue: { braces: "3.0.3" },
+      },
+    ])
+    expect(manifest["bun-nested-workspace"]?.synced).toEqual({
+      overrides: ["micromatch", "send>ms"],
+    })
+  })
+
+  test("rejects overrides that Bun skips", () => {
+    expect(() => syncManifest({ ...config() }, { overrides: { "a/b/c": "1.0.0" } })).toThrow(
+      'nested/package.json override "a/b/c" nests deeper than one level, which Bun ignores',
+    )
+    expect(() => syncManifest({ overrides: { a: "-" }, ...config() }, {})).toThrow(
+      'package.json override "a" has the value "-", which Bun ignores',
+    )
+  })
+
+  test("rejects two overrides that select the same packages, because the merge reorders them", () => {
+    expect(() =>
+      syncManifest({ overrides: { d: "1.0.0" }, ...config() }, { overrides: { "**/d": "2.0.0" } }),
+    ).toThrow(
+      'The overrides "**/d" and "d" select the same packages, so Bun applies one of them depending on the order of the keys; keep one of them',
+    )
+    expect(() =>
+      syncManifest({ ...config() }, { overrides: { p: { q: "1.0.0", "**/q": "2.0.0" } } }),
+    ).toThrow('The overrides "p" > "q" and "p" > "**/q" select the same packages')
+  })
+
+  test("rejects a synced override that selects the nested root by a range its version satisfies", () => {
+    const nested = (version: string | undefined, key: string): PackageManifest => ({
+      name: "@nested/root",
+      version,
+      overrides: { [key]: { kit: "2.0.0" } },
+    })
+
+    expect(() => syncManifest({ ...config() }, nested("1.2.0", "@nested/root@^1"))).toThrow(
+      'nested/package.json override "@nested/root@^1" > "kit" selects the nested root @nested/root@1.2.0 by a version range, which applies in the host but not in the nested repository; remove the range',
+    )
+    // The tools cannot tell how Bun matches this version, because node-semver drops the `>=0.0.0` bound.
+    expect(() =>
+      syncManifest({ ...config() }, nested("0.0.0-alpha", "@nested/root@>=0.0.0 <=0.0.0-beta")),
+    ).toThrow("selects the nested root @nested/root@0.0.0-alpha by a version range")
+    expect(() => syncManifest({ ...config() }, nested("1.2.0", "@nested/root@^2"))).not.toThrow()
+    expect(() => syncManifest({ ...config() }, nested(undefined, "@nested/root@^1"))).not.toThrow()
+    expect(() => syncManifest({ ...config() }, nested("1.2.0", "@nested/root"))).not.toThrow()
+  })
+
   test("rejects resolutions on either side while overrides are synced", () => {
     const resolutions = { "is-number": "7.0.0" }
 
@@ -165,6 +233,20 @@ describe("syncManifest", () => {
     expect(() => syncManifest(host(), nested)).toThrow("but the host root does not declare it")
     expect(() => syncManifest(host({ ms: "~2.1.1" }), { overrides: { ms: "$ms" } })).toThrow(
       "refers to a dependency that the root does not declare",
+    )
+  })
+
+  test("checks a nested `$name` override inside a group against the host root", () => {
+    const nested: PackageManifest = {
+      dependencies: { ms: "~2.1.1" },
+      overrides: { send: { ms: "$ms" } },
+    }
+
+    expect(
+      syncManifest({ devDependencies: { ms: "~2.1.1" }, ...config() }, nested).manifest.overrides,
+    ).toEqual({ send: { ms: "$ms" } })
+    expect(() => syncManifest({ devDependencies: { ms: "^2.0.0" }, ...config() }, nested)).toThrow(
+      'nested/package.json override "ms": "$ms" refers to "~2.1.1" in the nested root, but the host root declares "^2.0.0"',
     )
   })
 
@@ -280,6 +362,19 @@ describe("syncManifest", () => {
 
       expect(first.overridden).toEqual([])
       expect(second.manifest.overrides).toEqual({ semver: "^7.0.0" })
+    })
+
+    test("keeps a host group equal to the nested one in another key order as the host's own", () => {
+      const host: PackageManifest = {
+        overrides: { send: { ms: "2.1.1", debug: "2.6.9" } },
+        ...config(),
+      }
+      const nested: PackageManifest = { overrides: { send: { debug: "2.6.9", ms: "2.1.1" } } }
+
+      const { manifest, overridden } = syncManifest(host, nested)
+
+      expect(overridden).toEqual([])
+      expect(manifest["bun-nested-workspace"]?.synced).toBeUndefined()
     })
 
     test("updates synced entries silently and removes those the nested repository dropped", () => {

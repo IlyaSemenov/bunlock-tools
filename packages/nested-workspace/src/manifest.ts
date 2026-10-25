@@ -1,5 +1,11 @@
 import path from "node:path"
 
+import {
+  findReplacedOverrideRules,
+  overrideParentRangeIncludes,
+  readManifestOverrides,
+} from "bunlock-lockfile"
+
 import { isNestedPath } from "./paths"
 
 /** Root `package.json` fields that can be synced from the nested repository. */
@@ -56,6 +62,9 @@ export interface ResolvedConfig {
 
 type Catalog = Record<string, string>
 
+/** Value of an `overrides` entry: a version spec, or a group of rules keyed by `"."` and dependency selectors. */
+type OverrideValue = string | Record<string, string>
+
 /** Root `package.json` fields this package reads or rewrites; other fields are preserved as is. */
 export interface PackageManifest {
   dependencies?: Record<string, string>
@@ -65,7 +74,7 @@ export interface PackageManifest {
   workspaces?: string[] | WorkspacesConfig
   catalog?: Catalog
   catalogs?: Record<string, Catalog>
-  overrides?: Record<string, string>
+  overrides?: Record<string, OverrideValue>
   resolutions?: Record<string, string>
   patchedDependencies?: Record<string, string>
   trustedDependencies?: string[]
@@ -224,8 +233,8 @@ export interface OverriddenEntry {
   /** Field path, such as `catalog`, `catalogs.testing`, or `overrides`. */
   field: string
   name: string
-  hostValue: string
-  nestedValue: string
+  hostValue: OverrideValue
+  nestedValue: OverrideValue
 }
 
 /** Result of `syncManifest`. */
@@ -244,11 +253,13 @@ export interface ManifestSync {
 /**
  * Returns the host root `package.json` with the configured root fields of the nested `package.json` merged in.
  *
- * A nested entry replaces a host entry with the same name, while the other host entries stay.
+ * A nested entry replaces a host entry with the same key, while the other host entries stay.
  * Entries synced earlier and dropped by the nested repository are removed.
  * Throws when the host and the nested repository patch the same package version,
  * when either side defines `resolutions` while `overrides` are synced,
- * and when a synced `$name` override would refer to another range in the host root than in the nested root.
+ * when an override is one that `readManifestOverrides` rejects, when two overrides select the same packages,
+ * when a synced `$name` override would refer to another range in the host root than in the nested root,
+ * and when a synced override selects the nested root by a range that its version satisfies.
  */
 export function syncManifest(host: PackageManifest, nested: PackageManifest): ManifestSync {
   const config = readConfig(host)
@@ -310,18 +321,48 @@ export function syncManifest(host: PackageManifest, nested: PackageManifest): Ma
         )
       }
     }
+    const nestedSource = `${config.dir}/package.json`
     // The nested root dependencies stay out of the host root, so a nested `$name` override keeps its meaning
     // only when the host root declares the same range.
-    for (const [name, value] of Object.entries(nested.overrides ?? {})) {
-      const nestedRange = resolveOverrideValue(nested, name, value, `${config.dir}/package.json`)
-      const hostRanges = getDeclaredRanges(host, name)
-      if (value.startsWith("$") && (hostRanges.length !== 1 || hostRanges[0] !== nestedRange)) {
+    const nestedRules = readManifestOverrides(
+      nested.overrides ?? {},
+      (name, value) => {
+        const nestedRange = resolveOverrideValue(nested, name, value, nestedSource)
+        const hostRanges = getDeclaredRanges(host, name)
+        if (value.startsWith("$") && (hostRanges.length !== 1 || hostRanges[0] !== nestedRange)) {
+          throw new Error(
+            `${nestedSource} override ${JSON.stringify(name)}: ${JSON.stringify(value)} refers to ${JSON.stringify(nestedRange)} in the nested root, but the host root ${hostRanges.length ? `declares ${hostRanges.map(range => JSON.stringify(range)).join(", ")}` : "does not declare it"}; replace it with an explicit range`,
+          )
+        }
+        return nestedRange
+      },
+      nestedSource,
+    )
+    // Bun gives the root package no version, so a parent range never selects the nested root in its own repository.
+    // In the host the nested root is a workspace with the version of its package.json.
+    for (const { key, parent } of nestedRules) {
+      if (
+        parent?.range &&
+        parent.name === nested.name &&
+        typeof nested.version === "string" &&
+        // Matched as the merge matches it; a range the tools cannot evaluate counts as matching.
+        overrideParentRangeIncludes(parent.range, nested.version) !== false
+      ) {
         throw new Error(
-          `${config.dir}/package.json override ${JSON.stringify(name)}: ${JSON.stringify(value)} refers to ${JSON.stringify(nestedRange)} in the nested root, but the host root ${hostRanges.length ? `declares ${hostRanges.map(range => JSON.stringify(range)).join(", ")}` : "does not declare it"}; replace it with an explicit range`,
+          `${nestedSource} override ${key} selects the nested root ${parent.name}@${nested.version} by a version range, which applies in the host but not in the nested repository; remove the range`,
         )
       }
     }
     const merged = mergeEntries("overrides", host.overrides, nested.overrides, synced.overrides)
+    // Bun applies the later of two rules that select the same packages, and the merge sorts the keys.
+    const [replaced] = findReplacedOverrideRules(
+      readManifestOverrides(merged.entries, (_, value) => value),
+    )
+    if (replaced) {
+      throw new Error(
+        `The overrides ${replaced[0].key} and ${replaced[1].key} select the same packages, so Bun applies one of them depending on the order of the keys; keep one of them`,
+      )
+    }
     manifest.overrides = merged.entries
     synced.overrides = merged.synced
     overridden.push(...merged.overridden)
@@ -373,29 +414,37 @@ export function syncManifest(host: PackageManifest, nested: PackageManifest): Ma
 }
 
 /**
- * Merges name-keyed entries of one field.
+ * Merges the entries of one field by their keys.
  *
  * Host entries outside `synced` are the host's own.
  * An own entry equal to the nested one stays own, so it survives if the nested repository drops it later.
  */
-function mergeEntries(
+function mergeEntries<T extends OverrideValue>(
   field: string,
-  host: Record<string, string> = {},
-  nested: Record<string, string> = {},
+  host: Record<string, T> = {},
+  nested: Record<string, T> = {},
   synced: string[] = [],
 ) {
   const own = Object.fromEntries(Object.entries(host).filter(([name]) => !synced.includes(name)))
+  const isOwn = (name: string) => name in own && isSameValue(own[name]!, nested[name]!)
   const overridden = Object.entries(nested)
-    .filter(([name, value]) => name in own && own[name] !== value)
+    .filter(([name]) => name in own && !isOwn(name))
     .map(([name, nestedValue]) => ({ field, name, hostValue: own[name]!, nestedValue }))
 
   return {
     entries: sortKeys({ ...own, ...nested }),
     synced: Object.keys(nested)
-      .filter(name => own[name] !== nested[name])
+      .filter(name => !isOwn(name))
       .sort(),
     overridden,
   }
+}
+
+/** Returns whether two entry values are equal, ignoring the key order of groups. */
+function isSameValue(left: OverrideValue, right: OverrideValue) {
+  const toText = (value: OverrideValue) =>
+    typeof value === "string" ? value : JSON.stringify(sortKeys(value))
+  return typeof left === typeof right && toText(left) === toText(right)
 }
 
 /** Merges host patches with the nested patches, rewriting nested patch paths through the nested directory. */

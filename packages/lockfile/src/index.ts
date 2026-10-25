@@ -12,16 +12,24 @@ export {
   isGitPackageEntry,
   isOptionalPeerDependency,
   isPackageEntry,
+  needsLockfileVersion1,
   normalizeDependencyMap,
   npmAliasTarget,
   packageEntryMeta,
   parseBunLock,
   parseResolvedSpec,
 } from "./parse"
+export type { ManifestOverrideRule } from "./manifest-overrides"
+export {
+  findReplacedOverrideRules,
+  readManifestOverrides,
+  renderLockfileOverrides,
+} from "./manifest-overrides"
 export {
   dependencyOverrideRange,
   dependencyRequirement,
   effectiveDependencyRange,
+  overrideParentRangeIncludes,
 } from "./overrides"
 export { evaluateRangeCompatibility, isResolvedDependencyReachable } from "./ranges"
 export { renderBunLock } from "./render"

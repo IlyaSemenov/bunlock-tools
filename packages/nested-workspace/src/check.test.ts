@@ -203,6 +203,26 @@ describe("dependency mismatches", () => {
     ])
   })
 
+  test("findTransitiveMismatches checks edges against the overrides scoped to the version of their dependent", () => {
+    const overrides = { "sentry@^1": { kit: "4.6.1" } }
+    const overridden: Lockfile = {
+      ...nestedLock,
+      packages: { ...nestedLock.packages, kit: ["kit@4.6.1", "", {}, "sha-kit-4"] },
+      overrides,
+    }
+    const host: Lockfile = {
+      ...overridden,
+      packages: { ...overridden.packages, kit: ["kit@4.7.0", "", {}, "sha-kit-4-new"] },
+    }
+    const otherVersion: Lockfile = { ...overridden, overrides: { "sentry@^2": { kit: "4.6.1" } } }
+
+    expect(findTransitiveMismatches(host, overridden)).toEqual([
+      { path: ["@nested/web", "sentry", "kit"], expected: "kit@4.6.1", actual: "kit@4.7.0" },
+    ])
+    // Without the override, the nested lockfile resolves the edge outside its range, so the edge is skipped.
+    expect(findTransitiveMismatches(host, otherVersion)).toEqual([])
+  })
+
   test("findTransitiveMismatches does not apply a bare-name override to an npm alias", () => {
     const aliased: Lockfile = {
       ...nestedLock,
@@ -313,6 +333,27 @@ describe("findOwnDependencyChanges", () => {
     }
 
     expect(findOwnDependencyChanges(before, after, nestedLock, "nested")).toEqual([])
+  })
+
+  test("checks the nested version against the overrides scoped to the version of the host workspace", () => {
+    const before = (version: string): Lockfile => ({
+      lockfileVersion: 1,
+      workspaces: { "apps/api": { name: "@host/api", version, dependencies: { zod: "^3.0.0" } } },
+      packages: { zod: ["zod@3.25.0", "", {}, "sha-zod-3"] },
+      overrides: { "@host/api@^1": { zod: "^4.0.0" } },
+    })
+    const changes = (version: string) =>
+      findOwnDependencyChanges(
+        before(version),
+        { ...before(version), packages: { zod: ["zod@4.1.0", "", {}, "sha-zod"] } },
+        nestedLock,
+        "nested",
+      )
+
+    expect(changes("1.0.0")).toEqual([])
+    expect(changes("2.0.0")).toEqual([
+      { workspace: "@host/api", dependency: "zod", expected: "zod@3.25.0", actual: "zod@4.1.0" },
+    ])
   })
 
   test("reports a dependency that took a nested version outside the host range or disappeared", () => {

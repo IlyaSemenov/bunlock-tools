@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { parseLockfile } from "bun-nested-workspace"
+import { resolveDependencyLockKey } from "bunlock-lockfile"
 
 import type { Registry } from "./registry"
 import { startRegistry } from "./registry"
@@ -231,6 +232,56 @@ describe("sync", () => {
     expect(check.exitCode, check.output).toBe(0)
   })
 
+  test("keeps the nested resolutions that an override scoped to a parent version selects", async () => {
+    await using registry = await startRegistry([
+      { name: "leaf", version: "1.0.0" },
+      { name: "leaf", version: "1.1.0" },
+      { name: "leaf", version: "2.0.0" },
+      { name: "lib", version: "1.0.0", dependencies: { leaf: "^1.0.0" } },
+      { name: "lib", version: "2.0.0", dependencies: { leaf: "^1.0.0" } },
+    ])
+    const env = getRegistryEnv(registry)
+    await writeFiles({
+      "package.json": {
+        name: "@host/root",
+        private: true,
+        workspaces: ["apps/*", "nested", "nested/packages/*"],
+        "bun-nested-workspace": { dir: "nested" },
+      },
+      "apps/web/package.json": { name: "@host/web", dependencies: { lib: "1.0.0" } },
+      "nested/package.json": {
+        name: "@nested/root",
+        private: true,
+        workspaces: ["packages/*"],
+        overrides: { "lib@^2>leaf": "2.0.0" },
+      },
+      "nested/packages/core/package.json": { name: "@nested/core", dependencies: { lib: "2.0.0" } },
+    })
+    expect((await updateNestedLockfile([], env)).exitCode).toBe(0)
+    expect((await run(root, [process.execPath, "install", "--lockfile-only"], env)).exitCode).toBe(
+      0,
+    )
+
+    const sync = await run(root, [process.execPath, cliPath, "--lockfile-only"], env)
+
+    expect(sync.exitCode, sync.output).toBe(0)
+    const lock = parseLockfile(await Bun.file(path.join(root, "bun.lock")).text())
+    expect(lock.lockfileVersion).toBe(3)
+    expect(lock.overrides).toEqual({ "lib@^2": { leaf: "2.0.0" } })
+    const resolve = (dependent: string, dependency: string) => {
+      const key = resolveDependencyLockKey(dependent, dependency, lock.packages)!
+      return { key, resolution: lock.packages[key]![0] }
+    }
+    const hostLib = resolve("@host/web", "lib")
+    const nestedLib = resolve("@nested/core", "lib")
+    expect(hostLib.resolution).toBe("lib@1.0.0")
+    expect(resolve(hostLib.key, "leaf").resolution).toBe("leaf@1.1.0")
+    expect(nestedLib.resolution).toBe("lib@2.0.0")
+    expect(resolve(nestedLib.key, "leaf").resolution).toBe("leaf@2.0.0")
+    const check = await runCli("--check")
+    expect(check.exitCode, check.output).toBe(0)
+  })
+
   test("syncs a nested root entry without a name, which Bun keeps when the name is added later", async () => {
     await createFixture()
     const { name, ...nestedManifest } = await readJson("nested/package.json")
@@ -445,6 +496,28 @@ describe("sync", () => {
     expect(sync.exitCode).toBe(1)
     expect(sync.output).toContain(
       'package.json override "left-pad": "$left-pad" refers to a dependency that the root does not declare',
+    )
+    expect(await readJson("package.json")).not.toHaveProperty("trustedDependencies")
+    expect(await Bun.file(path.join(root, "bun.lock")).text()).toBe(lockText)
+  })
+
+  test("fails before writing when Bun skips a nested override", async () => {
+    await createFixture()
+    const nestedManifest = await readJson("nested/package.json")
+    await writeFiles({
+      "nested/package.json": {
+        ...nestedManifest,
+        overrides: { "is-odd": { "is-number": "github:owner/repo#bad\nref" } },
+      },
+    })
+    expect((await updateNestedLockfile()).exitCode).toBe(0)
+    const lockText = await Bun.file(path.join(root, "bun.lock")).text()
+
+    const sync = await runCli("--lockfile-only")
+
+    expect(sync.exitCode).toBe(1)
+    expect(sync.output).toContain(
+      'nested/bun.lock does not record the overrides of nested/package.json as Bun reads them: "is-odd"',
     )
     expect(await readJson("package.json")).not.toHaveProperty("trustedDependencies")
     expect(await Bun.file(path.join(root, "bun.lock")).text()).toBe(lockText)

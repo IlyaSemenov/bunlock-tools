@@ -1,7 +1,11 @@
 import path from "node:path"
 
 import type { BunPackageEntry } from "bunlock-lockfile"
-import { resolveDependencyLockKey } from "bunlock-lockfile"
+import {
+  packageOverrideRequester,
+  resolveDependencyLockKey,
+  workspaceOverrideRequester,
+} from "bunlock-lockfile"
 
 import type { Lockfile } from "./lockfile"
 import {
@@ -194,6 +198,7 @@ export function findTransitiveMismatches(lock: Lockfile, nestedLock: Lockfile): 
       continue
     }
 
+    const requester = packageOverrideRequester(nestedLock, entry[0])
     for (const [dependency, specifier] of Object.entries(getPackageDependencies(entry))) {
       const nestedDependencyKey = resolveDependencyLockKey(
         nestedKey,
@@ -206,6 +211,7 @@ export function findTransitiveMismatches(lock: Lockfile, nestedLock: Lockfile): 
         !nestedDependencyKey ||
         !satisfiesSpecifier(
           nestedLock,
+          requester,
           dependency,
           specifier,
           nestedLock.packages[nestedDependencyKey]!,
@@ -257,6 +263,10 @@ export function findOwnDependencyChanges(
   )
 
   return [...workspaces].flatMap(([workspacePath, workspace]) => {
+    const requester = workspaceOverrideRequester(
+      Object.hasOwn(after.workspaces, workspacePath) ? after : before,
+      workspacePath,
+    )
     const specifiers = {
       ...getWorkspaceDependencies(before.workspaces[workspacePath] ?? {}),
       ...getWorkspaceDependencies(after.workspaces[workspacePath] ?? {}),
@@ -273,7 +283,7 @@ export function findOwnDependencyChanges(
         actual === expected ||
         (actual !== undefined &&
           actual === nestedEntry?.[0] &&
-          satisfiesSpecifier(after, dependency, specifier, nestedEntry))
+          satisfiesSpecifier(after, requester, dependency, specifier, nestedEntry))
       ) {
         return []
       }
