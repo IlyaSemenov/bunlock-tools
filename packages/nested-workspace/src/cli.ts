@@ -17,7 +17,7 @@ import {
 
 const usage = `Usage:
   bun-nested-workspace [bun install options]  Sync package.json and bun.lock, then run bun install
-  bun-nested-workspace --check                Exit with 1 if package.json or bun.lock lag behind the nested checkout
+  bun-nested-workspace --check                Exit with 1 if package.json or bun.lock differ from the nested checkout
 
 Configure the nested directory in the "bun-nested-workspace" field of the host package.json.`
 
@@ -60,9 +60,10 @@ async function runCheck(root: string) {
 
   console.error(
     [
-      `package.json and bun.lock lag behind ${workspace.config.dir}:`,
+      `package.json and bun.lock differ from ${workspace.config.dir} (host → ${workspace.config.dir}):`,
       ...formatCheckResult(result),
-      "Run bun-nested-workspace without --check and commit package.json and bun.lock.",
+      `Either the host files were not synced with this checkout of ${workspace.config.dir}: run bun-nested-workspace without --check and commit package.json and bun.lock.`,
+      `Or they were synced with another revision of ${workspace.config.dir}: check out or publish that revision instead, because a sync with this checkout would revert them.`,
     ].join("\n"),
   )
   return 1

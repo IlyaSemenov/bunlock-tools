@@ -547,6 +547,7 @@ describe("--check", () => {
     const check = await runCli("--check")
 
     expect(check.exitCode).toBe(1)
+    expect(check.output).toContain("package.json and bun.lock differ from nested (host → nested):")
     expect(check.output).toContain('catalog.nested-only: "^2.0.0" → "^2.1.0"')
     expect(check.output).toContain("bun.lock workspaces:\n    nested/packages/core")
   })

@@ -136,7 +136,9 @@ Only `bun.lock` with `lockfileVersion` 1, 2, or 3 is supported, because the lock
 bunx bun-nested-workspace --check
 ```
 
-The check writes nothing, does not run `bun install`, and exits with code 1 when the host files lag behind the nested checkout.
+The check writes nothing, does not run `bun install`, and exits with code 1 when the host files differ from the nested checkout.
+A difference means either that the host files were not synced with this nested checkout yet, or that they were synced with a nested revision that the checkout lacks, for example in CI before that revision is pushed.
+In the second case, make that revision available instead of syncing: a sync with the checkout would revert the host files.
 It reads the root `package.json` and `bun.lock` of the host and of the nested checkout only, so it relies on the nested `bun.lock` being up to date with the nested packages.
 Verify that in the CI of the nested repository with `bun install --lockfile-only` followed by `git diff --exit-code bun.lock`: `bun install --frozen-lockfile` misses some changes, such as a narrowed range that the locked version still satisfies.
 Use it in a non-blocking CI job that signals when a sync commit is due.
