@@ -156,7 +156,7 @@ export function parseResolvedSpec(spec: string): { name: string; version: string
   return { name, version }
 }
 
-/** Error thrown when `bun.lock` has a structure that the tools do not support. */
+/** Error thrown when `bun.lock` has a structure that the tools do not support, or an override they cannot evaluate. */
 export class BunLockFormatError extends Error {
   constructor(message: string) {
     super(message)

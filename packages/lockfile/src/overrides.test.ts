@@ -179,7 +179,7 @@ describe("scoped overrides", () => {
 
     expect(() => effectiveDependencyRange(lock, debug, "leaf", "01.2.3")).toThrow(
       new BunLockFormatError(
-        'Cannot tell whether bun.lock override "leaf@^1" applies to leaf declared as "01.2.3"',
+        'Cannot tell whether bun.lock override "leaf@^1" applies to leaf declared as "01.2.3"; this tool cannot compare these ranges as Bun does, so change the override in package.json so that no range comparison is needed, such as by removing the range from its key or adding a rule scoped to the parent package, and run bun install',
       ),
     )
     expect(effectiveDependencyRange(lock, { name: "app" }, "leaf", "01.2.3")).toBe("3.0.0")

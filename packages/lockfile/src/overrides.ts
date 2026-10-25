@@ -124,7 +124,7 @@ function findOverride(
 
   if (undecided && (!best || outranks(undecided, best))) {
     throw new BunLockFormatError(
-      `Cannot tell whether bun.lock override ${undecided.rule.key} applies to ${name} declared as ${JSON.stringify(declaredRange)}`,
+      `Cannot tell whether bun.lock override ${undecided.rule.key} applies to ${name} declared as ${JSON.stringify(declaredRange)}; this tool cannot compare these ranges as Bun does, so change the override in package.json so that no range comparison is needed, such as by removing the range from its key or adding a rule scoped to the parent package, and run bun install`,
     )
   }
   if (best) return best.rule.value
